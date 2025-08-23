@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Pi Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="style.css" rel="stylesheet" />
+</head>
+<body>
+<header><h1>Pi Dashboard</h1></header>
+<div class="container">
+    <div class="grid2">
+        <div class="card">
+            <h3>System</h3>
+            <div class="kv"><span>Host</span><span class="mono" id="host">—</span></div>
+            <div class="kv"><span>CPU</span><span class="mono" id="cpuModel">—</span></div>
+            <div class="kv"><span>CPU Load</span><span class="mono" id="cpuLoad">—</span></div>
+            <div class="kv"><span>Cores</span><span class="mono" id="cores">—</span></div>
+            <div class="kv"><span>Temperature</span><span class="mono" id="temp">—</span></div>
+        </div>
+
+        <div class="card">
+            <h3>Memory</h3>
+            <div class="kv"><span>Used</span><span class="mono" id="memUsed">—</span></div>
+            <div class="kv"><span>Total</span><span class="mono" id="memTotal">—</span></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Disks</h3>
+        <div id="disks" class="small">—</div>
+    </div>
+
+    <div class="card">
+        <h3>Network</h3>
+        <div id="net" class="small">—</div>
+    </div>
+
+    <div class="small">Auto-refreshing every 5s</div>
+</div>
+
+<script>
+    async function fetchStats() {
+        try {
+            const res = await fetch('api/stats', { cache: 'no-store' });
+            const d = await res.json();
+
+            const uptimeMin = Math.round(d.uptimeSec / 60);
+
+            document.getElementById('host').textContent = d.host;
+            document.getElementById('cpuModel').textContent = d.cpu.model;
+            document.getElementById('cpuLoad').textContent = d.cpu.load + '%';
+            document.getElementById('cores').textContent = d.cpu.cores;
+            document.getElementById('temp').textContent = (d.temperatureC ?? 'N/A') + (d.temperatureC ? ' °C' : '');
+
+            document.getElementById('memUsed').textContent = d.memory.usedGB + ' GB';
+            document.getElementById('memTotal').textContent = d.memory.totalGB + ' GB';
+
+            document.getElementById('disks').innerHTML = d.disks.map(x =>
+                `<div class="kv"><span>${x.mount}</span><span class="mono">${x.usedGB} / ${x.totalGB} GB</span></div>`
+            ).join('');
+
+            document.getElementById('net').innerHTML = d.network.map(n =>
+                `<div class="kv"><span>${n.iface}</span><span class="mono">↓ ${n.rxMBs} MB/s ↑ ${n.txMBs} MB/s</span></div>`
+            ).join('') + `<div class="small">Uptime: ~${uptimeMin} min</div>`;
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    fetchStats();
+    setInterval(fetchStats, 5000);
+</script>
+</body>
+</html>
