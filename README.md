@@ -44,10 +44,18 @@ The dashboard is expected to be served under `/dashboard/`, with static assets h
 Example:
 
 ```nginx
+location = /dashboard { return 301 /dashboard/; }
+
+location = /dashboard/index.html {
+    alias /home/~/PiDashboard/public/index.html;
+    add_header Cache-Control "no-store, must-revalidate" always;
+}
+
 location /dashboard/ {
     alias /home/~/PiDashboard/public/;
     index index.html;
     try_files $uri $uri/ /dashboard/index.html;
+    expires 1h;
 }
 
 location /dashboard/api/ {
@@ -61,5 +69,6 @@ location /dashboard/api/ {
 ## Notes
 
 - The backend stays PM2-friendly and does not require a frontend build step.
+- Static assets must live directly in `/home/~/PiDashboard/public/` as `index.html`, `app.js`, and `style.css`.
 - Admin actions that rely on `sudo` will only succeed if the service user has the required non-interactive permissions.
 - Pi-hole API integration is optional. Set `PIHOLE_API_URL` and `PIHOLE_API_TOKEN` if you want live query/block metrics from the local API.
