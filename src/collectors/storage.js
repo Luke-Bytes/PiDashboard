@@ -65,4 +65,21 @@ async function collectLiveStorage() {
     }
 }
 
+async function collectLiveStorageSummary() {
+    try {
+        const fsSize = await si.fsSize();
+        const mounts = fsSize
+            .filter(item => item.mount?.startsWith('/'))
+            .map(normalizeMount)
+            .sort((a, b) => b.usedPct - a.usedPct);
+        return {
+            generatedAt: Date.now(),
+            mounts,
+        };
+    } catch {
+        return null;
+    }
+}
+
 export const collectStorage = withDataSource('storage', collectLiveStorage);
+export const collectStorageSummary = withDataSource('storage', collectLiveStorageSummary);
