@@ -1,31 +1,65 @@
 # PiDashboard
 
-A simple HTML dashboard for monitoring Raspberry Pi system vitals.  
-The backend is a small Express.js API that provides system information.
+An operational dashboard for a real Raspberry Pi admin environment. It focuses on service health, reverse-proxy topology, storage pressure, DNS state, PM2 apps, maintenance timers, and safe admin actions.
 
 ## Running
 
-Install dependencies and start:
-
 ```bash
 npm install
-npm run start:pm2
+npm start
 ```
 
-## Nginx setup
+For local development away from the Pi, the dashboard defaults to fixture data on non-Linux hosts. You can force a mode with:
 
-PiDashboard is expected to be served under /dashboard/.
-Static files come from the public/ directory, and API calls are proxied to the Node server.
+```bash
+DASHBOARD_DATA_MODE=fixture npm start
+DASHBOARD_DATA_MODE=live npm start
+```
+
+## API surface
+
+- `GET /api/overview`
+- `GET /api/services`
+- `GET /api/proxy`
+- `GET /api/storage`
+- `GET /api/network`
+- `GET /api/dns`
+- `GET /api/maintenance`
+- `GET /api/logs/summary`
+- `GET /api/actions`
+- `POST /api/actions/:id`
+
+## Layout
+
+- `src/config`: topology, timers, mounts, actions, runtime settings
+- `src/collectors`: live or fixture-backed domain collectors
+- `src/services`: cache and aggregation layer
+- `src/routes`: Express API router
+- `public/`: static dashboard UI
+
+## NGINX setup
+
+The dashboard is expected to be served under `/dashboard/`, with static assets handled by NGINX and API requests proxied to the backend on `127.0.0.1:4000`.
 
 Example:
+
 ```nginx
 location /dashboard/ {
-root /path/to/project/public;
-index index.html;
-try_files $uri /index.html;
+    alias /home/~/PiDashboard/public/;
+    index index.html;
+    try_files $uri $uri/ /dashboard/index.html;
 }
 
 location /dashboard/api/ {
-proxy_pass http://127.0.0.1:4000/dashboard/api/;
+    proxy_pass http://127.0.0.1:4000/api/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
+
+## Notes
+
+- The backend stays PM2-friendly and does not require a frontend build step.
+- Admin actions that rely on `sudo` will only succeed if the service user has the required non-interactive permissions.
+- Pi-hole API integration is optional. Set `PIHOLE_API_URL` and `PIHOLE_API_TOKEN` if you want live query/block metrics from the local API.
