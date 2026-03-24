@@ -3,6 +3,7 @@ import si from 'systeminformation';
 import { NETWORK_INTERFACES } from '../config/topology.js';
 import { withDataSource } from '../lib/dataSource.js';
 import { runCommand } from '../lib/command.js';
+import { normalizeInterfaceState } from '../lib/networkState.js';
 
 async function collectListeners() {
     const result = await runCommand('ss', ['-lntupH'], { timeout: 6000 });
@@ -52,15 +53,16 @@ async function collectLiveNetwork() {
         const interfaces = NETWORK_INTERFACES.map(meta => {
             const iface = netIfs.find(item => item.iface === meta.name);
             const stats = netStats.find(item => item.iface === meta.name);
+            const normalized = normalizeInterfaceState(meta, iface);
             return {
                 name: meta.name,
                 label: meta.label,
-                state: iface?.operstate || 'down',
+                state: normalized.state,
                 address: iface?.ip4subnet ? `${iface.ip4}/${iface.ip4subnet}` : iface?.ip4 || '—',
                 role: meta.role,
                 rxMbps: Number(((stats?.rx_sec || 0) / 1024 / 1024).toFixed(2)),
                 txMbps: Number(((stats?.tx_sec || 0) / 1024 / 1024).toFixed(2)),
-                severity: iface?.operstate === 'up' ? 'healthy' : 'warning',
+                severity: normalized.severity,
             };
         });
 

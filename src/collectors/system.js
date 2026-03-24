@@ -5,6 +5,7 @@ import { APP_CONFIG } from '../config/settings.js';
 import { CRITICAL_MOUNTS, NETWORK_INTERFACES, PROXY_ROUTES } from '../config/topology.js';
 import { withDataSource } from '../lib/dataSource.js';
 import { bytesToGiB, pickSeverity } from '../lib/format.js';
+import { normalizeInterfaceState } from '../lib/networkState.js';
 
 function normalizeMount(fsEntry) {
     const usedGiB = bytesToGiB(fsEntry.used);
@@ -46,15 +47,16 @@ async function collectLiveOverview() {
         const interfaces = NETWORK_INTERFACES.map(meta => {
             const iface = netIfs.find(item => item.iface === meta.name);
             const stats = netStats.find(item => item.iface === meta.name);
+            const normalized = normalizeInterfaceState(meta, iface);
             return {
                 name: meta.name,
                 label: meta.label,
-                state: iface?.operstate || 'down',
+                state: normalized.state,
                 address: iface?.ip4subnet ? `${iface.ip4}/${iface.ip4subnet}` : iface?.ip4 || '—',
                 role: meta.role,
                 rxMbps: Number(((stats?.rx_sec || 0) / 1024 / 1024).toFixed(2)),
                 txMbps: Number(((stats?.tx_sec || 0) / 1024 / 1024).toFixed(2)),
-                severity: iface?.operstate === 'up' ? 'healthy' : 'warning',
+                severity: normalized.severity,
             };
         });
 
