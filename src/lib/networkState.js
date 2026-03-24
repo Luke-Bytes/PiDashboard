@@ -29,7 +29,7 @@ export function normalizeInterfaceState(meta, iface) {
     }
 
     if (wireGuardLike) {
-        if (hasUpFlag && hasAddress) {
+        if (hasAddress && operstate !== 'down') {
             return { state: 'up', severity: 'healthy' };
         }
         if (hasUpFlag || hasAddress) {
