@@ -6,12 +6,12 @@ import { collectMaintenance } from '../collectors/maintenance.js';
 import { collectNetwork } from '../collectors/network.js';
 import { collectProxy } from '../collectors/proxy.js';
 import { collectServices } from '../collectors/services.js';
-import { collectStorage } from '../collectors/storage.js';
+import { collectStorage, collectStorageSummary } from '../collectors/storage.js';
 import { collectOverviewBase } from '../collectors/system.js';
 
 const cache = new TtlCache();
 
-function mergeOverview(base, services, proxy, storage, dns, network, maintenance, logs) {
+function mergeOverviewCore(base, services, storage, dns, network) {
     const serviceMatrix = [
         ...services.systemd.map(service => ({
             name: service.name,
@@ -29,16 +29,6 @@ function mergeOverview(base, services, proxy, storage, dns, network, maintenance
         })),
     ];
 
-    const proxyRoutes = proxy.routes.map(route => ({
-        id: route.id,
-        label: route.label,
-        host: route.host,
-        publicPath: route.publicPath,
-        severity: route.severity,
-        latencyMs: route.probe?.latencyMs ?? null,
-        target: route.target,
-    }));
-
     const alerts = [
         ...base.alerts,
         ...storage.mounts.filter(mount => mount.severity === 'critical').map(mount => ({
@@ -53,12 +43,6 @@ function mergeOverview(base, services, proxy, storage, dns, network, maintenance
             title: `${service.label} is ${service.state}`,
             detail: `${service.kind} service requires attention.`,
         })),
-        ...proxyRoutes.filter(route => route.severity !== 'healthy').map(route => ({
-            id: `route-${route.id}`,
-            level: route.severity === 'critical' ? 'critical' : 'warning',
-            title: `${route.label} probe failed`,
-            detail: `${route.host}${route.publicPath} is not healthy.`,
-        })),
     ].filter((alert, index, all) => all.findIndex(item => item.id === alert.id) === index);
 
     return {
@@ -66,19 +50,16 @@ function mergeOverview(base, services, proxy, storage, dns, network, maintenance
         summary: {
             ...base.summary,
             dnsHealthy: dns.ftlState === 'active' && dns.unboundState === 'active',
-            proxyHealthy: proxyRoutes.every(route => route.severity === 'healthy'),
+            proxyHealthy: null,
             vpnHealthy: network.interfaces.every(iface => iface.state === 'up'),
             queryRatePerMinute: dns.queryRatePerMinute,
             blockedPct: dns.blockedPct,
         },
         alerts,
         serviceMatrix,
-        proxy: {
-            degraded: proxyRoutes.filter(route => route.severity !== 'healthy').length,
-            routes: proxyRoutes,
-        },
+        proxy: null,
         storage: {
-            mounts: storage.mounts,
+            mounts: storage.mounts.slice(0, 3),
         },
         dns: {
             piholeEnabled: dns.piholeEnabled,
@@ -93,35 +74,89 @@ function mergeOverview(base, services, proxy, storage, dns, network, maintenance
         network: {
             interfaces: network.interfaces,
         },
-        maintenance: {
-            overdue: maintenance.timers.filter(timer => timer.state !== 'waiting').length,
-            timers: maintenance.timers.slice(0, 4),
-        },
-        recentEvents: [
-            ...(logs.events || []),
-            ...(services.restartEvents || []),
-        ].slice(0, 8),
+        maintenance: null,
+        recentEvents: (services.restartEvents || []).slice(0, 5),
         meta: {
             dataMode: APP_CONFIG.dataMode,
+            fastPath: true,
         },
     };
 }
 
-export async function getOverview(force = false) {
-    if (force) cache.clear('overview');
-    return cache.get('overview', APP_CONFIG.overviewTtlMs, async () => {
-        const [base, services, proxy, storage, dns, network, maintenance, logs] = await Promise.all([
+function mergeOverviewExtended(proxy, maintenance, logs) {
+    const proxyRoutes = proxy.routes.map(route => ({
+        id: route.id,
+        label: route.label,
+        host: route.host,
+        publicPath: route.publicPath,
+        severity: route.severity,
+        latencyMs: route.probe?.latencyMs ?? null,
+        target: route.target,
+        healthMode: route.healthMode || (route.probe ? 'http' : 'none'),
+        notes: route.notes || '',
+    }));
+
+    return {
+        generatedAt: Date.now(),
+        summary: {
+            proxyHealthy: proxyRoutes.filter(route => route.healthMode === 'http').every(route => route.severity === 'healthy'),
+        },
+        proxy: {
+            degraded: proxyRoutes.filter(route => route.healthMode === 'http' && route.severity !== 'healthy').length,
+            routes: proxyRoutes,
+        },
+        maintenance: {
+            overdue: maintenance.timers.filter(timer => timer.state !== 'waiting').length,
+            timers: maintenance.timers.slice(0, 4),
+        },
+        recentEvents: (logs.events || []).slice(0, 8),
+    };
+}
+
+export async function getOverviewCore(force = false) {
+    if (force) cache.clear('overview:core');
+    return cache.get('overview:core', APP_CONFIG.overviewTtlMs, async () => {
+        const [base, services, storage, dns, network] = await Promise.all([
             collectOverviewBase(),
             getServices(),
-            getProxy(),
-            getStorage(),
+            getStorageSummary(),
             getDns(),
             getNetwork(),
+        ]);
+        return mergeOverviewCore(base, services, storage, dns, network);
+    });
+}
+
+export async function getOverviewExtended(force = false) {
+    if (force) cache.clear('overview:extended');
+    return cache.get('overview:extended', APP_CONFIG.standardTtlMs, async () => {
+        const [proxy, maintenance, logs] = await Promise.all([
+            getProxy(),
             getMaintenance(),
             getLogsSummary(),
         ]);
-        return mergeOverview(base, services, proxy, storage, dns, network, maintenance, logs);
+        return mergeOverviewExtended(proxy, maintenance, logs);
     });
+}
+
+export async function getOverview(force = false) {
+    const [core, extended] = await Promise.all([
+        getOverviewCore(force),
+        getOverviewExtended(force),
+    ]);
+    return {
+        ...core,
+        summary: {
+            ...core.summary,
+            proxyHealthy: extended.summary.proxyHealthy,
+        },
+        proxy: extended.proxy,
+        maintenance: extended.maintenance,
+        recentEvents: [
+            ...(core.recentEvents || []),
+            ...(extended.recentEvents || []),
+        ].slice(0, 8),
+    };
 }
 
 export async function getServices(force = false) {
@@ -137,6 +172,11 @@ export async function getProxy(force = false) {
 export async function getStorage(force = false) {
     if (force) cache.clear('storage');
     return cache.get('storage', APP_CONFIG.expensiveTtlMs, collectStorage);
+}
+
+export async function getStorageSummary(force = false) {
+    if (force) cache.clear('storage:summary');
+    return cache.get('storage:summary', APP_CONFIG.standardTtlMs, collectStorageSummary);
 }
 
 export async function getNetwork(force = false) {

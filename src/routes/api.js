@@ -7,10 +7,13 @@ import {
     getMaintenance,
     getNetwork,
     getOverview,
+    getOverviewCore,
+    getOverviewExtended,
     getProxy,
     getServices,
     getStorage,
 } from '../services/dashboardService.js';
+import { getPolicy, runPolicyAction, runPolicyInspectReport } from '../services/policyService.js';
 
 export function createApiRouter() {
     const router = express.Router();
@@ -22,6 +25,22 @@ export function createApiRouter() {
     router.get('/overview', async (_req, res, next) => {
         try {
             res.json(await getOverview());
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.get('/overview/core', async (_req, res, next) => {
+        try {
+            res.json(await getOverviewCore());
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.get('/overview/extended', async (_req, res, next) => {
+        try {
+            res.json(await getOverviewExtended());
         } catch (error) {
             next(error);
         }
@@ -90,6 +109,30 @@ export function createApiRouter() {
     router.post('/actions/:id', async (req, res, next) => {
         try {
             res.json(await executeAction(req.params.id));
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.get('/policy', async (_req, res, next) => {
+        try {
+            res.json(await getPolicy());
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.post('/policy/actions/:id', async (req, res, next) => {
+        try {
+            res.json(await runPolicyAction(req.params.id));
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.get('/policy/inspect/:id', async (req, res, next) => {
+        try {
+            res.json(await runPolicyInspectReport(req.params.id));
         } catch (error) {
             next(error);
         }

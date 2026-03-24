@@ -30,7 +30,10 @@ export async function executeAction(id) {
     }
 
     if (action.type === 'command') {
-        const result = await runCommand(action.command, action.args, { timeout: 15000 });
+        const result = await runCommand(action.command, action.args, {
+            timeout: action.timeout ?? 15000,
+            cwd: action.cwd,
+        });
         clearAllCaches();
         return {
             ok: result.ok,

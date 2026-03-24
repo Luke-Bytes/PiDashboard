@@ -14,6 +14,7 @@ async function collectLiveProxy() {
                 host: route.host,
                 publicPath: route.publicPath,
                 target: route.upstream.target,
+                healthMode: route.healthMode || (probe ? 'http' : 'none'),
                 notes: route.notes || '',
                 severity: probe ? (probe.ok ? 'healthy' : route.critical ? 'critical' : 'warning') : 'healthy',
                 probe,

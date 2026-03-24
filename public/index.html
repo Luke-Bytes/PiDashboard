@@ -16,6 +16,7 @@
         </div>
         <nav class="nav">
             <button class="nav-link active" data-target="overview">Overview</button>
+            <button class="nav-link" data-target="policy">Policy</button>
             <button class="nav-link" data-target="services">Services</button>
             <button class="nav-link" data-target="proxy">Proxy & Routes</button>
             <button class="nav-link" data-target="storage">Storage</button>
@@ -37,8 +38,12 @@
                 <div>
                     <p class="eyebrow">Overview</p>
                     <h2>Operational state</h2>
+                    <p class="subtle">Fast-first critical state, with heavier summaries deferred.</p>
                 </div>
-                <div class="status-pill" id="globalStatus">Loading</div>
+                <div class="page-actions">
+                    <button class="ghost-button" id="copyOverviewBrief">Copy brief</button>
+                    <div class="status-pill" id="globalStatus">Loading</div>
+                </div>
             </div>
             <div class="hero-grid">
                 <article class="card card-span-2">
@@ -78,12 +83,66 @@
                     <div id="dnsSummary" class="stack compact"></div>
                 </article>
                 <article class="card">
+                    <div class="card-header"><h3>Maintenance snapshot</h3></div>
+                    <div id="maintenanceSummary" class="stack compact"></div>
+                </article>
+                <article class="card">
                     <div class="card-header"><h3>VPN & interfaces</h3></div>
                     <div id="networkSummary" class="stack compact"></div>
                 </article>
                 <article class="card">
                     <div class="card-header"><h3>Recent warnings</h3></div>
                     <div id="eventsSummary" class="stack compact"></div>
+                </article>
+            </div>
+        </section>
+
+        <section class="page" id="page-policy">
+            <div class="page-header">
+                <div>
+                    <p class="eyebrow">Policy</p>
+                    <h2>Runtime, controls, and copyable outputs</h2>
+                    <p class="subtle">Process-managed service view with on-demand inspection and no passive HTTP noise.</p>
+                </div>
+                <div class="page-actions">
+                    <button class="ghost-button" id="copyPolicyBrief">Copy brief</button>
+                    <div class="status-pill" id="policyStatus">Loading</div>
+                </div>
+            </div>
+            <div class="grid-two">
+                <article class="card card-span-2">
+                    <div class="card-header"><h3>Runtime</h3></div>
+                    <div id="policyRuntime"></div>
+                </article>
+                <article class="card">
+                    <div class="card-header"><h3>Safe actions</h3></div>
+                    <div id="policyActions" class="stack"></div>
+                </article>
+                <article class="card">
+                    <div class="card-header"><h3>Inspection reports</h3></div>
+                    <div id="policyReports" class="stack"></div>
+                </article>
+                <article class="card">
+                    <div class="card-header"><h3>Recent logs</h3></div>
+                    <div id="policyLogs" class="stack compact"></div>
+                </article>
+                <article class="card">
+                    <div class="card-header"><h3>Action output</h3></div>
+                    <pre id="policyActionOutput" class="console">No action executed yet.</pre>
+                </article>
+                <article class="card card-span-2">
+                    <div class="card-header">
+                        <h3>Structured brief</h3>
+                        <button class="ghost-button" id="copyPolicyStructured">Copy structured</button>
+                    </div>
+                    <pre id="policyStructuredOutput" class="console">Run a report to generate a structured brief.</pre>
+                </article>
+                <article class="card card-span-2">
+                    <div class="card-header">
+                        <h3>Raw output</h3>
+                        <button class="ghost-button" id="copyPolicyRaw">Copy raw</button>
+                    </div>
+                    <pre id="policyRawOutput" class="console">Run a report to capture raw output.</pre>
                 </article>
             </div>
         </section>
@@ -194,7 +253,7 @@
             <div class="page-header">
                 <div>
                     <p class="eyebrow">Tools</p>
-                    <h2>Safe admin actions</h2>
+                    <h2>Global admin actions</h2>
                 </div>
             </div>
             <div class="grid-two">

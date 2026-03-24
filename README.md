@@ -19,6 +19,8 @@ DASHBOARD_DATA_MODE=live npm start
 ## API surface
 
 - `GET /api/overview`
+- `GET /api/overview/core`
+- `GET /api/overview/extended`
 - `GET /api/services`
 - `GET /api/proxy`
 - `GET /api/storage`
@@ -28,6 +30,9 @@ DASHBOARD_DATA_MODE=live npm start
 - `GET /api/logs/summary`
 - `GET /api/actions`
 - `POST /api/actions/:id`
+- `GET /api/policy`
+- `POST /api/policy/actions/:id`
+- `GET /api/policy/inspect/:id`
 
 ## Layout
 
@@ -69,6 +74,8 @@ location /dashboard/api/ {
 ## Notes
 
 - The backend stays PM2-friendly and does not require a frontend build step.
+- The overview page renders critical state first from `/api/overview/core` and fills heavier summaries from `/api/overview/extended`.
+- The Policy page is process-managed by design; it prefers PM2/runtime health, safe actions, and on-demand inspection output over passive HTTP probing.
 - Static assets must live directly in `/home/~/PiDashboard/public/` as `index.html`, `app.js`, and `style.css`.
 - Admin actions that rely on `sudo` will only succeed if the service user has the required non-interactive permissions.
 - Pi-hole API integration is optional. Set `PIHOLE_API_URL` and `PIHOLE_API_TOKEN` if you want live query/block metrics from the local API.

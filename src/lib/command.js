@@ -9,6 +9,7 @@ export async function runCommand(command, args = [], options = {}) {
             timeout: options.timeout ?? 5000,
             maxBuffer: options.maxBuffer ?? 1024 * 1024,
             env: process.env,
+            cwd: options.cwd,
         });
         return {
             ok: true,

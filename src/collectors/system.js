@@ -116,4 +116,4 @@ async function collectLiveOverview() {
     }
 }
 
-export const collectOverviewBase = withDataSource('overview', collectLiveOverview);
+export const collectOverviewBase = withDataSource('overviewCore', collectLiveOverview);

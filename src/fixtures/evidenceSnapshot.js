@@ -2,7 +2,7 @@ const now = Date.now();
 
 export const evidenceSnapshot = {
     generatedAt: now,
-    overview: {
+    overviewCore: {
         summary: {
             hostname: 'raspberrypi',
             platform: 'Debian 12',
@@ -22,7 +22,7 @@ export const evidenceSnapshot = {
             rootFreeGiB: 96,
             secureUsedPct: 57,
             dnsHealthy: true,
-            proxyHealthy: true,
+            proxyHealthy: null,
             vpnHealthy: true,
         },
         alerts: [
@@ -43,15 +43,7 @@ export const evidenceSnapshot = {
             { name: 'fail2ban', label: 'Fail2Ban', kind: 'systemd', state: 'active', severity: 'healthy' },
             { name: 'smartmontools', label: 'SMART Monitoring', kind: 'systemd', state: 'active', severity: 'healthy' },
         ],
-        proxy: {
-            degraded: 0,
-            routes: [
-                { id: 'dashboard', label: 'Dashboard', host: 'anniwars.win', publicPath: '/dashboard/', severity: 'healthy', latencyMs: 18, target: '127.0.0.1:4000' },
-                { id: 'restapi', label: 'REST API', host: 'anniwars.win', publicPath: '/restapi/', severity: 'healthy', latencyMs: 22, target: '127.0.0.1:3000' },
-                { id: 'jellyfin', label: 'Jellyfin', host: 'anniwars.win', publicPath: '/jellyfin/', severity: 'healthy', latencyMs: 28, target: '127.0.0.1:8096' },
-                { id: 'policy', label: 'Policy API', host: 'policy.anniwars.win', publicPath: '/', severity: 'healthy', latencyMs: 21, target: '127.0.0.1:2300' },
-            ],
-        },
+        proxy: null,
         storage: {
             mounts: [
                 { mount: '/', label: 'Root SSD', fsType: 'ext4', source: '/dev/sda2', usedPct: 90, usedGiB: 775, totalGiB: 917, freeGiB: 96, severity: 'critical' },
@@ -76,6 +68,27 @@ export const evidenceSnapshot = {
                 { name: 'wg-surfshark', label: 'Surfshark', state: 'up', address: '10.14.0.2/16', role: 'vpn-client', rxMbps: 0.1, txMbps: 0.1, severity: 'healthy' },
             ],
         },
+        maintenance: null,
+        recentEvents: [
+            { ts: now - 45 * 60 * 1000, source: 'storage', level: 'critical', message: 'Root filesystem remains above 90% utilization.' },
+            { ts: now - 10 * 60 * 60 * 1000, source: 'pm2:TeamsBot', level: 'warning', message: 'TeamsBot restarted 2 times in the last 24h.' },
+        ],
+        meta: {
+            dataMode: 'auto',
+            fastPath: true,
+        },
+    },
+    overviewExtended: {
+        generatedAt: now,
+        proxy: {
+            degraded: 0,
+            routes: [
+                { id: 'dashboard', label: 'Dashboard', host: 'anniwars.win', publicPath: '/dashboard/', severity: 'healthy', latencyMs: 18, target: '127.0.0.1:4000', healthMode: 'http' },
+                { id: 'restapi', label: 'REST API', host: 'anniwars.win', publicPath: '/restapi/', severity: 'healthy', latencyMs: 22, target: '127.0.0.1:3000', healthMode: 'http' },
+                { id: 'jellyfin', label: 'Jellyfin', host: 'anniwars.win', publicPath: '/jellyfin/', severity: 'healthy', latencyMs: 28, target: '127.0.0.1:8096', healthMode: 'http' },
+                { id: 'policy', label: 'Policy API', host: 'policy.anniwars.win', publicPath: '/', severity: 'healthy', latencyMs: null, target: '127.0.0.1:2300', healthMode: 'process', notes: 'No passive HTTP probe configured.' },
+            ],
+        },
         maintenance: {
             overdue: 0,
             timers: [
@@ -87,6 +100,9 @@ export const evidenceSnapshot = {
             { ts: now - 45 * 60 * 1000, source: 'storage', level: 'critical', message: 'Root filesystem remains above 90% utilization.' },
             { ts: now - 2 * 60 * 60 * 1000, source: 'maintenance', level: 'info', message: 'certbot.timer completed successfully.' },
         ],
+        summary: {
+            proxyHealthy: true,
+        },
     },
     services: {
         generatedAt: now,
@@ -120,7 +136,7 @@ export const evidenceSnapshot = {
             { id: 'dashboard', label: 'Dashboard', host: 'anniwars.win', publicPath: '/dashboard/', target: '/home/luke/PiDashboard/public + 127.0.0.1:4000', severity: 'healthy', probe: { ok: true, latencyMs: 18, status: 200 } },
             { id: 'restapi', label: 'REST API', host: 'anniwars.win', publicPath: '/restapi/', target: '127.0.0.1:3000', severity: 'healthy', probe: { ok: true, latencyMs: 22, status: 200 } },
             { id: 'jellyfin', label: 'Jellyfin', host: 'anniwars.win', publicPath: '/jellyfin/', target: '127.0.0.1:8096', severity: 'healthy', probe: { ok: true, latencyMs: 28, status: 200 } },
-            { id: 'policy', label: 'Policy API', host: 'policy.anniwars.win', publicPath: '/', target: '127.0.0.1:2300', severity: 'healthy', probe: { ok: true, latencyMs: 21, status: 200 } },
+            { id: 'policy', label: 'Policy API', host: 'policy.anniwars.win', publicPath: '/', target: '127.0.0.1:2300', severity: 'healthy', healthMode: 'process', probe: null, notes: 'No passive HTTP probe configured.' },
             { id: 'pihole-admin', label: 'Pi-hole Admin', host: 'anniwars.win', publicPath: '/admin/ and /pihole/', target: 'LAN-only reverse proxy', severity: 'healthy', probe: null, notes: 'Restricted to LAN inside NGINX.' },
         ],
     },
@@ -205,5 +221,44 @@ export const evidenceSnapshot = {
             { ts: now - 3 * 60 * 60 * 1000, source: 'certbot.timer', level: 'info', message: 'Certificate renewal check completed successfully.' },
         ],
         sources: ['journal', 'pm2', 'nginx', 'pihole-FTL'],
+    },
+    policy: {
+        generatedAt: now,
+        runtime: {
+            name: 'policy',
+            label: 'Policy API',
+            state: 'online',
+            severity: 'healthy',
+            healthMode: 'process',
+            uptimeSeconds: 604800,
+            restarts: 0,
+            memoryMiB: 85,
+            cpuPct: 0.8,
+            port: 2300,
+            proxyHost: 'policy.anniwars.win',
+            cwd: '/home/luke/ValidationAPI',
+            notes: [
+                'No passive HTTP probe by default; health is based on PM2 runtime and operator-triggered inspection.',
+                'The service has strict route semantics and some HTTP endpoints create telemetry noise.',
+            ],
+        },
+        actions: [
+            { id: 'policy-start', label: 'Start Policy', description: 'Start the policy PM2 app.', confirmation: true, type: 'command' },
+            { id: 'policy-stop', label: 'Stop Policy', description: 'Stop the policy PM2 app.', confirmation: true, type: 'command' },
+            { id: 'policy-restart', label: 'Restart Policy', description: 'Restart the policy PM2 app.', confirmation: true, type: 'command' },
+            { id: 'policy-rebuild', label: 'Rebuild Policy', description: 'Run the policy project rebuild script from the ValidationAPI repository.', confirmation: true, type: 'command' },
+        ],
+        reports: [
+            { id: 'policy-db-inspect', label: 'DB Inspect', description: 'Run the general policy database inspection script.' },
+            { id: 'policy-recent-checks', label: 'Recent Checks', description: 'Show recent policy checks.' },
+            { id: 'policy-recent-checks-by-build', label: 'Checks by Build', description: 'Show recent checks grouped by build.' },
+            { id: 'policy-recent-key-requests', label: 'Recent Key Requests', description: 'Show recent public-key request activity.' },
+            { id: 'policy-recent-users', label: 'Recent Users', description: 'Show recent users seen by the policy service.' },
+            { id: 'policy-blocked-fingerprints', label: 'Blocked Fingerprints', description: 'Show blocked fingerprints from access control data.' },
+        ],
+        logs: [
+            { ts: now - 15 * 60 * 1000, level: 'info', source: 'pm2:policy-out.log', message: 'Policy API listening on 127.0.0.1:2300' },
+            { ts: now - 3 * 60 * 60 * 1000, level: 'info', source: 'pm2:policy-out.log', message: 'Policy database migration check completed.' },
+        ],
     },
 };

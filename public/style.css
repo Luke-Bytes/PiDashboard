@@ -148,6 +148,12 @@ textarea {
     margin-bottom: 18px;
 }
 
+.page-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .status-pill,
 .badge,
 .severity {
@@ -227,6 +233,11 @@ textarea {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
+}
+
+.stats-grid.two-up {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 16px;
 }
 
 .stat {
@@ -326,6 +337,16 @@ textarea {
     background: rgba(106, 179, 255, 0.12);
     color: var(--accent);
     border: 1px solid rgba(106, 179, 255, 0.26);
+    border-radius: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+}
+
+.ghost-button {
+    justify-self: start;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 10px 14px;
     cursor: pointer;
