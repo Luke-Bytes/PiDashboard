@@ -72,7 +72,7 @@ chmod 0600 /var/lib/pi-dashboard/provider-reminders.json
 systemctl daemon-reload
 /usr/local/libexec/pi-dashboard-cloud-status || fail "the initial quota collection failed"
 
-expected_providers=$(awk 'NF && $1 !~ /^#/ { if ($1 !~ /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/) exit 2; printf "%s%s", separator, $1; separator="," }' "$PI_DASHBOARD_PROVIDERS") || fail "provider registry contains an invalid identifier"
+expected_providers=$(awk 'NF && $1 !~ /^#/ { if (NF != 1 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_-]*$/ || length($1) > 64) exit 2; printf "%s%s", separator, $1; separator="," }' "$PI_DASHBOARD_PROVIDERS") || fail "provider registry contains an invalid identifier"
 [ -n "$expected_providers" ] || fail "provider registry contains no providers"
 [ ! -L "$CACHE" ] || fail "refusing symlinked cloud cache"
 [ "$(stat -c '%U:%G %a' "$CACHE")" = "root:$DASHBOARD_GROUP 640" ] || fail "cache must be root:$DASHBOARD_GROUP mode 0640"
