@@ -54,7 +54,10 @@ runuser -u jellyfin -- test -x "$PI_DASHBOARD_RCLONE_BINARY" || fail "jellyfin c
 runuser -u jellyfin -- test -x "$PI_DASHBOARD_PASSWORD_COMMAND" || fail "jellyfin cannot execute the password helper"
 [ "$PI_DASHBOARD_CLOUD_CACHE" = "$CACHE" ] || fail "cache must be configured as $CACHE"
 
-install -d -o root -g "$DASHBOARD_GROUP" -m 0750 /var/lib/pi-dashboard
+# The dashboard writes reminder state atomically, so it must be able to create
+# a temporary file in this directory as well as update the existing file.
+install -d -o root -g "$DASHBOARD_GROUP" -m 0770 /var/lib/pi-dashboard
+runuser -u "$DASHBOARD_USER" -- test -w /var/lib/pi-dashboard || fail "$DASHBOARD_USER cannot create atomic reminder-state updates in /var/lib/pi-dashboard"
 install -o root -g root -m 0755 "$SCRIPT_DIR/pi-dashboard-cloud-status" /usr/local/libexec/pi-dashboard-cloud-status
 install -d -o root -g root -m 0755 /etc/systemd/system/rclone-pool-health.service.d
 install -o root -g root -m 0644 "$SCRIPT_DIR/rclone-pool-health.service.d/20-pi-dashboard-cloud-status.conf" /etc/systemd/system/rclone-pool-health.service.d/20-pi-dashboard-cloud-status.conf
