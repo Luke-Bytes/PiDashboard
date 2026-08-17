@@ -96,7 +96,7 @@ async function pathUsage(target, label, warningPct = 85, criticalPct = 90) {
     } catch { return { path: target, label, available: false, usedPct: null, severity: 'inactive' }; }
 }
 
-function normalizeCloudCache(raw) {
+export function normalizeCloudCache(raw, now = Date.now(), staleMs = APP_CONFIG.media.healthStaleMs) {
     const registry = raw?.providerRegistry || raw?.lastKnownProviders || [];
     const registryIds = registry.map(item => typeof item === 'string' ? item : item?.id).filter(isValidProviderId);
     const sourceProviders = Array.isArray(raw?.providers) ? raw.providers : Object.entries(raw?.providers || {}).map(([id, value]) => ({ id, ...value }));
@@ -105,25 +105,60 @@ function normalizeCloudCache(raw) {
     return ids.map(id => {
         const item = byId.get(id) || {};
         const quota = item.quota || (item.total !== undefined ? { total: item.total, used: item.used, free: item.free, trashed: item.trashed } : null);
+        const normalizedQuota = quota && typeof quota === 'object' ? {
+            total: Number.isFinite(quota.total) ? quota.total : null,
+            used: Number.isFinite(quota.used) ? quota.used : null,
+            free: Number.isFinite(quota.free) ? quota.free : null,
+            trashed: Number.isFinite(quota.trashed) ? quota.trashed : null,
+        } : null;
+        const hasQuota = normalizedQuota && [normalizedQuota.total, normalizedQuota.used, normalizedQuota.free].some(Number.isFinite);
+        const lastSuccessMs = Date.parse(item.lastSuccess || '');
+        const quotaStale = item.reachability === 'failed' || !Number.isFinite(lastSuccessMs) || now - lastSuccessMs > staleMs;
         return {
             id,
-            quota: quota && typeof quota === 'object' ? {
-                total: Number.isFinite(quota.total) ? quota.total : null,
-                used: Number.isFinite(quota.used) ? quota.used : null,
-                free: Number.isFinite(quota.free) ? quota.free : null,
-                trashed: Number.isFinite(quota.trashed) ? quota.trashed : null,
-            } : null,
+            quota: hasQuota ? normalizedQuota : null,
             reachability: ['ok', 'failed', 'unknown'].includes(item.reachability) ? item.reachability : (item.lastSuccess ? 'ok' : 'unknown'),
             lastAttempt: item.lastAttempt || null,
             lastSuccess: item.lastSuccess || null,
             errorCategory: ['timeout', 'unreachable', 'authentication_failure', 'quota_unsupported'].includes(item.errorCategory) ? item.errorCategory : null,
+            quotaState: hasQuota ? (quotaStale ? 'stale' : 'fresh') : 'not_collected',
+            quotaStale: Boolean(hasQuota && quotaStale),
+            quotaAgeMs: Number.isFinite(lastSuccessMs) ? Math.max(0, now - lastSuccessMs) : null,
         };
     });
 }
 
-async function readCloudCache() {
-    try { return { available: true, providers: normalizeCloudCache(JSON.parse(await fs.readFile(APP_CONFIG.media.cloudCachePath, 'utf8'))) }; }
-    catch (error) { return { available: false, providers: [], error: error.code === 'ENOENT' ? 'Cloud status has not been collected' : 'Cloud status cache is unreadable' }; }
+export async function readCloudCache(filePath = APP_CONFIG.media.cloudCachePath, now = Date.now(), staleMs = APP_CONFIG.media.healthStaleMs) {
+    try {
+        const raw = JSON.parse(await fs.readFile(filePath, 'utf8'));
+        if (!raw || typeof raw !== 'object' || !Array.isArray(raw.providerRegistry) || !raw.providers || typeof raw.providers !== 'object') throw new Error('invalid cache schema');
+        const collectedMs = Date.parse(raw.generatedAt || '');
+        if (!Number.isFinite(collectedMs)) throw new Error('invalid collection timestamp');
+        const ageMs = Math.max(0, now - collectedMs);
+        const state = ageMs > staleMs ? 'stale' : 'fresh';
+        return {
+            available: true,
+            state,
+            collectedAt: new Date(collectedMs).toISOString(),
+            ageMs,
+            freshness: state,
+            providers: normalizeCloudCache(raw, now, staleMs),
+            error: null,
+        };
+    } catch (error) {
+        const notCollected = error.code === 'ENOENT';
+        return {
+            available: false,
+            state: notCollected ? 'not_collected' : 'unreadable',
+            collectedAt: null,
+            ageMs: null,
+            freshness: null,
+            providers: [],
+            error: notCollected
+                ? 'Cloud quota collector is not installed or has not completed its first collection'
+                : 'Cloud status cache is unreadable or invalid',
+        };
+    }
 }
 
 async function diagnostics() {
@@ -135,7 +170,7 @@ async function diagnostics() {
 export async function collectLiveMedia(options = {}) {
     const now = options.now ?? Date.now();
     const [unitResult, mounts, cloud, system, usage, reminderState, recentDiagnostics] = await Promise.all([
-        collectUnits(), readMounts(), readCloudCache(),
+        collectUnits(), readMounts(), readCloudCache(APP_CONFIG.media.cloudCachePath, now),
         Promise.all([si.currentLoad(), si.mem(), si.cpuTemperature()]).catch(() => null),
         Promise.all([
             pathUsage('/', 'Root'), pathUsage(APP_CONFIG.media.vaultMount, 'Vault', 80, 90),
@@ -215,7 +250,8 @@ export async function collectLiveMedia(options = {}) {
         ...(health.severity === 'warning' ? ['pool-health'] : []),
         ...usage.filter(item => item.severity === 'warning').map(item => `space-${item.path}`),
         ...usage.filter(item => item.available === false && !(vault.intentionalLock && item.path === APP_CONFIG.media.vaultMount)).map(item => `capacity-${item.path}`),
-        ...(!cloud.available ? ['cloud-cache'] : []),
+        ...(!cloud.available || cloud.state === 'stale' ? ['cloud-cache'] : []),
+        ...providers.filter(provider => provider.quotaStale).map(provider => `quota-stale-${provider.id}`),
         ...mediaServices.filter(item => item.severity === 'warning').map(item => `service-${item.name}`),
     ];
     return {
@@ -224,6 +260,12 @@ export async function collectLiveMedia(options = {}) {
         vault, media: mediaSummary, cloudMounts, services: mediaServices, systemdAvailable: unitResult.available,
         system: system ? { uptimeSeconds: os.uptime(), cpuLoadPct: Number(system[0].currentLoad.toFixed(1)), memoryUsedBytes: system[1].active || system[1].used, memoryTotalBytes: system[1].total, zramUsedBytes: system[1].swapused, zramTotalBytes: system[1].swaptotal, temperatureC: system[2].main || null } : { available: false },
         capacity: usage, providers, cloudAvailable: cloud.available, cloudError: cloud.error || null,
+        cloudCollection: {
+            state: cloud.state,
+            lastCollectedAt: cloud.collectedAt,
+            freshness: cloud.freshness,
+            ageMs: cloud.ageMs,
+        },
         aggregates: aggregateQuotas(providers), health, diagnostics: recentDiagnostics,
         evidence: {
             systemd: rawMediaServices.map(service => ({ name: service.name, ...service.raw })),

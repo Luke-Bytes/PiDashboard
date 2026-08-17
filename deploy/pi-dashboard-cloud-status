@@ -15,11 +15,11 @@ from pathlib import Path
 
 PROVIDER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 CACHE_PATH = Path(os.environ.get("PI_DASHBOARD_CLOUD_CACHE", "/var/lib/pi-dashboard/cloud-status.json"))
-PROVIDERS_PATH = Path(os.environ.get("PI_DASHBOARD_PROVIDERS", "/srv/secure/rclone/providers.list"))
-RCLONE_CONFIG = os.environ.get("PI_DASHBOARD_RCLONE_CONFIG", "/srv/secure/rclone/rclone.conf")
-RCLONE_BINARY = os.environ.get("PI_DASHBOARD_RCLONE_BINARY", "/usr/bin/rclone")
+PROVIDERS_PATH = Path(os.environ.get("PI_DASHBOARD_PROVIDERS", "/srv/secure/rclone/pool/providers.list"))
+RCLONE_CONFIG = os.environ.get("PI_DASHBOARD_RCLONE_CONFIG", "/srv/secure/rclone/pool/rclone.conf")
+RCLONE_BINARY = os.environ.get("PI_DASHBOARD_RCLONE_BINARY", "/usr/local/bin/rclone-cloud")
 RUNUSER_BINARY = os.environ.get("PI_DASHBOARD_RUNUSER_BINARY", "/usr/sbin/runuser")
-PASSWORD_COMMAND = os.environ.get("PI_DASHBOARD_PASSWORD_COMMAND", "")
+PASSWORD_COMMAND = os.environ.get("PI_DASHBOARD_PASSWORD_COMMAND", "/usr/local/libexec/rclone-pool-config-pass")
 
 
 def utc_now():
@@ -54,7 +54,25 @@ def read_providers():
             raise ValueError("provider registry contains an invalid identifier")
         if name not in names:
             names.append(name)
+    if not names:
+        raise ValueError("provider registry contains no providers")
     return names
+
+
+def validate_configuration():
+    checks = (
+        (PROVIDERS_PATH, "provider registry", False),
+        (Path(RCLONE_CONFIG), "rclone config", False),
+        (Path(RCLONE_BINARY), "rclone binary", True),
+        (Path(RUNUSER_BINARY), "runuser binary", True),
+    )
+    if PASSWORD_COMMAND:
+        checks += ((Path(PASSWORD_COMMAND.split()[0]), "password helper", True),)
+    for path, label, executable in checks:
+        if not path.is_absolute() or not path.is_file():
+            raise RuntimeError(f"{label} is missing: {path}")
+        if executable and not os.access(path, os.X_OK):
+            raise RuntimeError(f"{label} is not executable: {path}")
 
 
 def about(provider):
@@ -108,9 +126,11 @@ def aggregate_field(quotas, key):
 def main():
     previous = load_json(CACHE_PATH, {"version": 1, "providerRegistry": [], "providers": {}})
     try:
+        validate_configuration()
         providers = read_providers()
-    except (OSError, ValueError):
-        return 0  # Vault locked/unavailable: preserve the last successful cache verbatim.
+    except (OSError, ValueError, RuntimeError) as error:
+        print(f"pi-dashboard cloud collector setup error: {error}", file=os.sys.stderr)
+        return 2
     old = previous.get("providers", {}) if isinstance(previous.get("providers"), dict) else {}
     output = {"version": 1, "generatedAt": utc_now(), "providerRegistry": providers, "providers": {}}
     for provider in providers:

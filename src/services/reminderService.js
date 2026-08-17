@@ -26,13 +26,15 @@ export function addCalendarMonths(dateString, months) {
 }
 
 export function reminderView(entry, now = Date.now()) {
-    if (!entry?.confirmedDateLondon) return { state: 'missing', severity: 'warning', label: 'Login date not recorded', nextDueDate: null };
+    const history = Array.isArray(entry?.history) ? entry.history.slice(-HISTORY_LIMIT) : [];
+    if (!entry?.confirmedDateLondon) return { state: 'missing', severity: 'warning', label: 'Login date not recorded', nextDueDate: null, lastConfirmedAt: null, history };
     const nextDueDate = addCalendarMonths(entry.confirmedDateLondon, entry.intervalMonths || DEFAULT_INTERVAL_MONTHS);
     const today = londonDate(now);
     const daysUntil = Math.round((Date.parse(`${nextDueDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
-    if (daysUntil < 0) return { state: 'overdue', severity: 'warning', label: `Overdue by ${Math.abs(daysUntil)} days`, nextDueDate, daysUntil };
-    if (daysUntil <= 30) return { state: 'approaching', severity: 'warning', label: `Due in ${daysUntil} days`, nextDueDate, daysUntil };
-    return { state: 'current', severity: 'healthy', label: `Due ${nextDueDate}`, nextDueDate, daysUntil };
+    const details = { nextDueDate, daysUntil, lastConfirmedAt: entry.confirmedAtUtc || null, history };
+    if (daysUntil < 0) return { state: 'overdue', severity: 'warning', label: `Overdue by ${Math.abs(daysUntil)} days`, ...details };
+    if (daysUntil <= 30) return { state: 'approaching', severity: 'warning', label: `Due in ${daysUntil} days`, ...details };
+    return { state: 'current', severity: 'healthy', label: `Due ${nextDueDate}`, ...details };
 }
 
 export function emptyReminderState() {

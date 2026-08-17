@@ -18,6 +18,12 @@ test('reminders distinguish missing, approaching, and overdue', () => {
     assert.equal(reminderView({ confirmedDateLondon: '2026-01-31', intervalMonths: 6 }, Date.parse('2026-08-17T12:00:00Z')).state, 'overdue');
 });
 
+test('reminder view exposes the bounded confirmation history', () => {
+    const history = Array.from({ length: 14 }, (_, index) => `2026-0${(index % 8) + 1}-01T00:00:00.000Z`);
+    const view = reminderView({ confirmedDateLondon: '2026-08-01', confirmedAtUtc: history.at(-1), intervalMonths: 6, history }, Date.parse('2026-08-18T12:00:00Z'));
+    assert.equal(view.history.length, 12); assert.equal(view.lastConfirmedAt, history.at(-1)); assert.equal(view.nextDueDate, '2027-02-01');
+});
+
 test('reconciliation adds new providers and archives removed providers', () => {
     const first = reconcileProviders(emptyReminderState(), ['ocean-a', 'ocean-b']);
     const next = reconcileProviders(first, ['ocean-b']);

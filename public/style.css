@@ -272,6 +272,22 @@ textarea {
     font-size: 13px;
 }
 
+.provider-stats span {
+    display: grid;
+    gap: 3px;
+}
+
+.provider-stats strong {
+    color: var(--text);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.collector-error {
+    color: var(--red);
+}
+
 .fine-print {
     margin: 12px 0 0;
     color: var(--muted);
