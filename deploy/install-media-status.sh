@@ -5,6 +5,7 @@ CONFIG=/etc/pi-dashboard/cloud-status.conf
 CACHE=/var/lib/pi-dashboard/cloud-status.json
 DASHBOARD_USER=luke
 DASHBOARD_GROUP=luke
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 fail() {
     echo "Media status installation failed: $*" >&2
@@ -23,7 +24,7 @@ if [ -L "$CONFIG" ]; then
     fail "refusing symlinked configuration at $CONFIG"
 fi
 if [ ! -e "$CONFIG" ]; then
-    install -o root -g root -m 0600 deploy/cloud-status.conf.example "$CONFIG"
+    install -o root -g root -m 0600 "$SCRIPT_DIR/cloud-status.conf.example" "$CONFIG"
     echo "Installed default cloud collector configuration at $CONFIG"
 else
     echo "Preserving existing cloud collector configuration at $CONFIG"
@@ -54,9 +55,9 @@ runuser -u jellyfin -- test -x "$PI_DASHBOARD_PASSWORD_COMMAND" || fail "jellyfi
 [ "$PI_DASHBOARD_CLOUD_CACHE" = "$CACHE" ] || fail "cache must be configured as $CACHE"
 
 install -d -o root -g "$DASHBOARD_GROUP" -m 0750 /var/lib/pi-dashboard
-install -o root -g root -m 0755 deploy/pi-dashboard-cloud-status /usr/local/libexec/pi-dashboard-cloud-status
+install -o root -g root -m 0755 "$SCRIPT_DIR/pi-dashboard-cloud-status" /usr/local/libexec/pi-dashboard-cloud-status
 install -d -o root -g root -m 0755 /etc/systemd/system/rclone-pool-health.service.d
-install -o root -g root -m 0644 deploy/rclone-pool-health.service.d/20-pi-dashboard-cloud-status.conf /etc/systemd/system/rclone-pool-health.service.d/20-pi-dashboard-cloud-status.conf
+install -o root -g root -m 0644 "$SCRIPT_DIR/rclone-pool-health.service.d/20-pi-dashboard-cloud-status.conf" /etc/systemd/system/rclone-pool-health.service.d/20-pi-dashboard-cloud-status.conf
 
 if [ -L /var/lib/pi-dashboard/provider-reminders.json ]; then
     fail "refusing symlinked reminder state"
