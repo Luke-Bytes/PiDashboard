@@ -20,5 +20,6 @@ test('POST rejects missing and foreign origins and accepts exact origin', () => 
 
 test('reverse-proxy protocol is respected', () => {
     assert.equal(evaluate({ host: 'anniwars.win', origin: 'https://anniwars.win', 'x-forwarded-proto': 'https' }).passed, true);
+    assert.equal(evaluate({ host: '127.0.0.1:4000', origin: 'https://anniwars.win', 'x-forwarded-proto': 'http' }).passed, true);
     assert.equal(evaluate({ host: 'anniwars.win', origin: 'http://anniwars.win', 'x-forwarded-proto': 'https' }).status, 403);
 });

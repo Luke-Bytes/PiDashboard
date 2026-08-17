@@ -288,6 +288,12 @@ textarea {
     color: var(--red);
 }
 
+.provider-action-message {
+    min-height: 1.3em;
+    color: var(--red);
+    font-size: 12px;
+}
+
 .fine-print {
     margin: 12px 0 0;
     color: var(--muted);

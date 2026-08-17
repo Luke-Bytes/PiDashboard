@@ -18,9 +18,9 @@ async function cacheFile(value) {
 
 test('cloud cache reports fresh collection and fresh provider quota', async () => {
     const generatedAt = new Date(now - DAY).toISOString();
-    const file = await cacheFile({ version: 1, generatedAt, providerRegistry: ['drime-1'], providers: { 'drime-1': { quota: { total: 100, used: 40, free: 60, trashed: 1 }, reachability: 'ok', lastSuccess: generatedAt } } });
+    const file = await cacheFile({ version: 1, generatedAt, providerRegistry: ['drime-1'], providers: { 'drime-1': { account: 'person@example.com', quota: { total: 100, used: 40, free: 60, trashed: 1 }, reachability: 'ok', lastSuccess: generatedAt } } });
     const result = await readCloudCache(file, now, 9 * DAY);
-    assert.equal(result.state, 'fresh'); assert.equal(result.collectedAt, generatedAt); assert.equal(result.providers[0].quotaState, 'fresh');
+    assert.equal(result.state, 'fresh'); assert.equal(result.collectedAt, generatedAt); assert.equal(result.providers[0].quotaState, 'fresh'); assert.equal(result.providers[0].account, 'person@example.com');
 });
 
 test('old collection and failed provider retain numbers but report stale', async () => {

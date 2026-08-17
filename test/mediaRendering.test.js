@@ -9,4 +9,6 @@ test('provider cards render explicit numeric fields and stale refresh context', 
     assert.match(source, /<strong>Total<\/strong>/);
     assert.match(source, /refresh failed/);
     assert.match(source, /Last successful quota/);
+    assert.match(source, /Account:/);
+    assert.match(source, /Could not save:/);
 });

@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 PROVIDER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+EMAIL_RE = re.compile(r"^[^\s@]{1,64}@[^\s@]{1,189}$")
 CACHE_PATH = Path(os.environ.get("PI_DASHBOARD_CLOUD_CACHE", "/var/lib/pi-dashboard/cloud-status.json"))
 PROVIDERS_PATH = Path(os.environ.get("PI_DASHBOARD_PROVIDERS", "/srv/secure/rclone/pool/providers.list"))
 RCLONE_CONFIG = os.environ.get("PI_DASHBOARD_RCLONE_CONFIG", "/srv/secure/rclone/pool/rclone.conf")
@@ -95,6 +96,26 @@ def about(provider):
         return None, classify(str(error))
 
 
+def account_email(provider):
+    """Read only an email-shaped identity from rclone's redacted configuration."""
+    command = [RUNUSER_BINARY, "-u", "jellyfin", "--", RCLONE_BINARY, "--config", RCLONE_CONFIG]
+    if PASSWORD_COMMAND:
+        command.extend(["--password-command", PASSWORD_COMMAND])
+    command.extend(["config", "redacted", provider])
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
+        if result.returncode:
+            return None
+        for line in result.stdout.splitlines():
+            key, separator, value = line.partition("=")
+            candidate = value.strip()
+            if separator and key.strip().lower() in {"user", "username", "email", "account"} and EMAIL_RE.fullmatch(candidate):
+                return candidate
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
 def atomic_write(value):
     CACHE_PATH.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=".cloud-status.", dir=CACHE_PATH.parent)
@@ -136,12 +157,13 @@ def main():
     for provider in providers:
         prior = old.get(provider, {}) if isinstance(old.get(provider), dict) else {}
         attempt = utc_now()
+        account = account_email(provider) or prior.get("account")
         quota, error = about(provider)
         if quota is not None:
-            output["providers"][provider] = {"quota": quota, "reachability": "ok", "lastAttempt": attempt, "lastSuccess": attempt, "errorCategory": None}
+            output["providers"][provider] = {"account": account, "quota": quota, "reachability": "ok", "lastAttempt": attempt, "lastSuccess": attempt, "errorCategory": None}
         else:
             output["providers"][provider] = {
-                "quota": prior.get("quota"), "reachability": "failed", "lastAttempt": attempt,
+                "account": account, "quota": prior.get("quota"), "reachability": "failed", "lastAttempt": attempt,
                 "lastSuccess": prior.get("lastSuccess"), "errorCategory": error,
             }
     totals = [item.get("quota") for item in output["providers"].values() if isinstance(item.get("quota"), dict)]

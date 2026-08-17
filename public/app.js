@@ -52,7 +52,12 @@ function capacityBar(used, total) {
 }
 
 async function fetchJson(url) { const response = await fetch(url, { cache: 'no-store' }); if (!response.ok) throw new Error(`${url} returned ${response.status}`); return response.json(); }
-async function postJson(url) { const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); if (!response.ok) throw new Error(`${url} returned ${response.status}`); return response.json(); }
+async function postJson(url) {
+    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `${url} returned ${response.status}`);
+    return payload;
+}
 async function copyText(text, label) { try { await navigator.clipboard.writeText(text); setText('actionOutput', `${label} copied to clipboard.`); } catch (error) { setText('actionOutput', `Clipboard copy failed: ${error.message}`); } }
 function showGlobalError(error) { setText('actionOutput', error.message || String(error)); }
 
@@ -124,12 +129,22 @@ function renderMedia() {
         const quotaLabel = provider.quotaState === 'stale' ? `Stale${provider.reachability === 'failed' ? ' • refresh failed' : ''}` : provider.quotaState === 'fresh' ? 'Fresh' : 'Not collected';
         const quotaSeverity = provider.quotaState === 'fresh' ? 'healthy' : provider.quotaState === 'stale' ? 'warning' : 'inactive';
         const lastLogin = reminder.history?.length ? reminder.history[reminder.history.length - 1] : reminder.lastConfirmedAt;
-        return `<article class="provider-card"><div class="list-top"><div class="list-title mono">${esc(provider.id)}</div>${badge(quotaLabel, quotaSeverity)}</div>${capacityBar(quota.used, quota.total)}<div class="provider-stats"><span><strong>Used</strong>${esc(formatBytes(quota.used))}</span><span><strong>Free</strong>${esc(formatBytes(quota.free))}</span><span><strong>Total</strong>${esc(formatBytes(quota.total))}</span></div><div class="list-meta">Last successful quota: ${esc(formatTime(provider.lastSuccess))}${provider.errorCategory ? ` • ${esc(provider.errorCategory)}` : ''}</div><div class="list-meta">Last confirmed login: ${esc(formatTime(lastLogin))} • ${(reminder.history || []).length} saved confirmation${(reminder.history || []).length === 1 ? '' : 's'}</div><div class="reminder-row">${badge(reminder.label || 'Login date not recorded', reminder.severity)}<button class="ghost-button" data-provider-login="${esc(provider.id)}">I logged in today</button></div></article>`;
+        return `<article class="provider-card"><div class="list-top"><div><div class="list-title mono">${esc(provider.id)}</div><div class="list-meta">Account: ${esc(provider.account || 'Unavailable')}</div></div>${badge(quotaLabel, quotaSeverity)}</div>${capacityBar(quota.used, quota.total)}<div class="provider-stats"><span><strong>Used</strong>${esc(formatBytes(quota.used))}</span><span><strong>Free</strong>${esc(formatBytes(quota.free))}</span><span><strong>Total</strong>${esc(formatBytes(quota.total))}</span></div><div class="list-meta">Last successful quota: ${esc(formatTime(provider.lastSuccess))}${provider.errorCategory ? ` • ${esc(provider.errorCategory)}` : ''}</div><div class="list-meta">Last confirmed login: ${esc(formatTime(lastLogin))} • ${(reminder.history || []).length} saved confirmation${(reminder.history || []).length === 1 ? '' : 's'}</div><div class="reminder-row">${badge(reminder.label || 'Login date not recorded', reminder.severity)}<button class="ghost-button" data-provider-login="${esc(provider.id)}">I logged in today</button></div><div class="provider-action-message" data-provider-message="${esc(provider.id)}" role="status"></div></article>`;
     }, media.cloudError || 'No active providers in the cached registry.'));
     setHtml('mediaDiagnostics', renderList(media.diagnostics || [], message => `<div class="event-item mono">${esc(message)}</div>`, 'No recent media errors.'));
     const evidence = media.evidence || {};
     setHtml('mediaEvidence', renderList(evidence.systemd || [], unit => `<div class="event-item mono">${esc(Object.entries(unit).map(([key, value]) => `${key}=${value ?? ''}`).join(' • '))}</div>`, 'No raw systemd evidence.') + renderList(evidence.mounts || [], mount => `<div class="event-item mono">${esc(`${mount.path}: ${mount.present ? 'present' : 'absent'} • ${mount.fsType || 'no filesystem'} • ${mount.source || 'no source'}`)}</div>`, 'No mount evidence.'));
-    document.querySelectorAll('[data-provider-login]').forEach(button => { button.onclick = async () => { const provider = button.getAttribute('data-provider-login'); button.disabled = true; try { await postJson(`${apiBase}/media/providers/${encodeURIComponent(provider)}/login`); state.media = await fetchJson(endpoints.media); renderMedia(); renderOverviewMedia(); } catch (error) { showGlobalError(error); } finally { button.disabled = false; } }; });
+    document.querySelectorAll('[data-provider-login]').forEach(button => { button.onclick = async () => {
+        const provider = button.getAttribute('data-provider-login'); const message = button.closest('.provider-card')?.querySelector('[data-provider-message]');
+        button.disabled = true; button.textContent = 'Saving…'; if (message) message.textContent = '';
+        try {
+            const result = await postJson(`${apiBase}/media/providers/${encodeURIComponent(provider)}/login`);
+            button.textContent = result.changed ? 'Saved today' : 'Already saved today';
+            state.media = await fetchJson(endpoints.media); renderMedia(); renderOverviewMedia();
+        } catch (error) {
+            button.textContent = 'Try again'; if (message) message.textContent = `Could not save: ${error.message || String(error)}`;
+        } finally { button.disabled = false; }
+    }; });
 }
 
 function renderServices() {

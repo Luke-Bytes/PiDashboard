@@ -20,7 +20,7 @@ test('root helper writes sanitized quotas and preserves successful values on fai
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-helper-'));
     const bin = path.join(directory, 'bin'); await fs.mkdir(bin);
     const fakeRunuser = path.join(bin, 'runuser');
-    await fs.writeFile(fakeRunuser, '#!/bin/sh\nif [ "$FAKE_RCLONE_MODE" = fail ] || { [ "$FAKE_RCLONE_MODE" = partial ] && echo "$*" | grep -q "ocean-b:"; }; then echo "token=not-persisted" >&2; exit 1; fi\nprintf \'%s\\n\' \'{"total":100,"used":40,"free":60,"extra":"discarded"}\'\n', { mode: 0o755 });
+    await fs.writeFile(fakeRunuser, '#!/bin/sh\nif [ "$FAKE_RCLONE_MODE" = fail ] || { [ "$FAKE_RCLONE_MODE" = partial ] && echo "$*" | grep -q "ocean-b:"; }; then echo "token=not-persisted" >&2; exit 1; fi\ncase "$*" in *"config redacted ocean-a"*) printf "user = ocean-a@example.com\\n"; exit 0;; *"config redacted ocean-b"*) printf "username = ocean-b@example.com\\npassword = should-not-escape\\n"; exit 0;; esac\nprintf \'%s\\n\' \'{"total":100,"used":40,"free":60,"extra":"discarded"}\'\n', { mode: 0o755 });
     const providers = path.join(directory, 'providers.list'); const cache = path.join(directory, 'cloud-status.json'); const rcloneConfig = path.join(directory, 'rclone.conf');
     await fs.writeFile(providers, 'ocean-a\nocean-b\n');
     await fs.writeFile(rcloneConfig, '[test]\n');
@@ -29,6 +29,8 @@ test('root helper writes sanitized quotas and preserves successful values on fai
     assert.equal(firstRun.code, 0, firstRun.stderr);
     const success = JSON.parse(await fs.readFile(cache, 'utf8'));
     assert.deepEqual(success.providers['ocean-a'].quota, { total: 100, used: 40, free: 60, trashed: null });
+    assert.equal(success.providers['ocean-a'].account, 'ocean-a@example.com');
+    assert.equal(JSON.stringify(success).includes('should-not-escape'), false);
     assert.deepEqual(Object.keys(success.providers), ['ocean-a', 'ocean-b']);
     assert.equal(JSON.stringify(success).includes('extra'), false);
     assert.equal((await run('python3', [helper], { env: { ...env, FAKE_RCLONE_MODE: 'fail' } })).code, 0);

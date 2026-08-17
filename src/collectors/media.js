@@ -116,6 +116,7 @@ export function normalizeCloudCache(raw, now = Date.now(), staleMs = APP_CONFIG.
         const quotaStale = item.reachability === 'failed' || !Number.isFinite(lastSuccessMs) || now - lastSuccessMs > staleMs;
         return {
             id,
+            account: typeof item.account === 'string' && /^[^\s@]{1,64}@[^\s@]{1,189}$/.test(item.account) ? item.account : null,
             quota: hasQuota ? normalizedQuota : null,
             reachability: ['ok', 'failed', 'unknown'].includes(item.reachability) ? item.reachability : (item.lastSuccess ? 'ok' : 'unknown'),
             lastAttempt: item.lastAttempt || null,
