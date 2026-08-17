@@ -22,14 +22,15 @@ export const APP_CONFIG = {
     mediaSlowTtlMs: 60000,
     media: {
         vaultMapper: process.env.MEDIA_VAULT_MAPPER || '/dev/mapper/securevault',
-        vaultMarker: process.env.MEDIA_VAULT_MARKER || '/run/securevault-unlocked',
+        vaultMarker: process.env.MEDIA_VAULT_MARKER || '/srv/secure/.securevault-marker',
         vaultMount: process.env.MEDIA_VAULT_MOUNT || '/srv/secure',
-        poolMount: process.env.MEDIA_POOL_MOUNT || '/media/pool',
-        oceanMount: process.env.MEDIA_OCEAN_MOUNT || '/media/ocean',
+        poolMount: process.env.MEDIA_POOL_MOUNT || '/srv/secure/cloud/pool',
+        oceanMount: process.env.MEDIA_OCEAN_MOUNT || '/mnt/jellyfin-cloud/ocean-source',
         requiredPaths: (process.env.MEDIA_REQUIRED_PATHS || '/media,/var/lib/jellyfin').split(',').filter(Boolean),
         transcodePath: process.env.JELLYFIN_TRANSCODE_PATH || '/var/cache/jellyfin/transcodes',
         cloudCachePath: process.env.CLOUD_STATUS_CACHE || '/var/lib/pi-dashboard/cloud-status.json',
         reminderStatePath: process.env.PROVIDER_REMINDER_STATE || '/var/lib/pi-dashboard/provider-reminders.json',
         healthStaleMs: Number(process.env.MEDIA_HEALTH_STALE_MS || 9 * 24 * 60 * 60 * 1000),
+        transitionGraceMs: Number(process.env.MEDIA_TRANSITION_GRACE_MS || 60000),
     },
 };

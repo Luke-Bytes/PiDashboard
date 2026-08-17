@@ -6,7 +6,7 @@ import { APP_CONFIG, shouldUseFixtureData } from '../config/settings.js';
 import { evidenceSnapshot } from '../fixtures/evidenceSnapshot.js';
 import { aggregateQuotas, isValidProviderId, redactSecrets } from '../lib/cloudQuota.js';
 import { runCommand } from '../lib/command.js';
-import { calculateOverallStatus, healthTimerStatus, inferVaultState, providerFailure } from '../lib/mediaStatus.js';
+import { calculateOverallStatus, createVaultStateTracker, deriveMediaSummary, healthTimerStatus, interpretMediaServices, providerFailure } from '../lib/mediaStatus.js';
 import { readReminderState, reconcileProviders, reminderView, writeJsonAtomic } from '../services/reminderService.js';
 
 const UNIT_META = [
@@ -16,6 +16,8 @@ const UNIT_META = [
     { name: 'rclone-pool-health.timer', label: 'Weekly health', timer: true },
     { name: 'rclone-pool-health.service', label: 'Pool health check', check: true },
 ];
+
+const vaultStateTracker = createVaultStateTracker(APP_CONFIG.media.transitionGraceMs);
 
 function fieldsFromBlock(block) {
     return Object.fromEntries(block.split('\n').filter(Boolean).map(line => {
@@ -33,7 +35,7 @@ function timestamp(value) {
 async function collectUnits() {
     const result = await runCommand('systemctl', [
         'show', ...UNIT_META.map(unit => unit.name),
-        '--property=Id,LoadState,ActiveState,SubState,Result,NRestarts,MemoryCurrent,CPUUsageNSec,ActiveEnterTimestampMonotonic,LastTriggerUSec,NextElapseUSecRealtime',
+        '--property=Id,LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus,NRestarts,MemoryCurrent,CPUUsageNSec,ActiveEnterTimestampMonotonic,ActiveEnterTimestamp,InactiveEnterTimestamp,LastTriggerUSec,NextElapseUSecRealtime',
     ], { timeout: 8000 });
     if (!result.stdout) return { available: false, units: [] };
     const units = result.stdout.split('\n\n').filter(Boolean).map(fieldsFromBlock).map(fields => {
@@ -46,6 +48,10 @@ async function collectUnits() {
             state: fields.LoadState === 'not-found' ? 'unavailable' : (fields.ActiveState || 'unknown'),
             subState: fields.SubState || 'unknown',
             result: fields.Result || null,
+            execMainCode: fields.ExecMainCode || null,
+            execMainStatus: Number.isFinite(Number(fields.ExecMainStatus)) ? Number(fields.ExecMainStatus) : null,
+            activeEnterTimestamp: timestamp(fields.ActiveEnterTimestamp),
+            inactiveEnterTimestamp: timestamp(fields.InactiveEnterTimestamp),
             restarts: Number(fields.NRestarts || 0),
             uptimeSeconds: uptime === null ? null : Math.round(uptime),
             memoryBytes: Number.isFinite(Number(fields.MemoryCurrent)) ? Number(fields.MemoryCurrent) : null,
@@ -54,6 +60,7 @@ async function collectUnits() {
             lastTrigger: timestamp(fields.LastTriggerUSec),
             nextRun: timestamp(fields.NextElapseUSecRealtime),
             vaultDependent: Boolean(meta.vaultDependent),
+            raw: { ...fields },
         };
     });
     return { available: true, units };
@@ -139,20 +146,47 @@ export async function collectLiveMedia(options = {}) {
     const units = unitResult.units;
     const unit = name => units.find(item => item.name === name);
     const mount = target => mounts.find(item => item.mount === target);
-    const mediaServices = UNIT_META.filter(item => item.vaultDependent).map(meta => unit(meta.name) || { ...meta, state: 'unavailable', severity: 'critical' });
-    const cloudMounts = [APP_CONFIG.media.oceanMount, APP_CONFIG.media.poolMount].map(target => {
+    const rawMediaServices = UNIT_META.filter(item => item.vaultDependent).map(meta => unit(meta.name) || { ...meta, state: 'unavailable', subState: 'unknown', result: null, execMainStatus: null, raw: {} });
+    const cloudMounts = [
+        { target: APP_CONFIG.media.oceanMount, role: 'ocean' },
+        { target: APP_CONFIG.media.poolMount, role: 'pool' },
+    ].map(({ target, role }) => {
         const found = mount(target);
-        return { path: target, present: Boolean(found), fuse: Boolean(found?.fsType?.startsWith('fuse')), fsType: found?.fsType || null };
+        return { path: target, role, present: Boolean(found), fuse: Boolean(found?.fsType?.startsWith('fuse')), fsType: found?.fsType || null, source: found?.source || null };
     });
-    const vault = inferVaultState({
-        mapper: await exists(APP_CONFIG.media.vaultMapper), marker: await exists(APP_CONFIG.media.vaultMarker),
-        vaultMount: Boolean(mount(APP_CONFIG.media.vaultMount)), cloudMounts,
-        dependentServices: mediaServices,
+    const mapperPresent = await exists(APP_CONFIG.media.vaultMapper);
+    const markerPresent = await exists(APP_CONFIG.media.vaultMarker);
+    const foundVaultMount = mount(APP_CONFIG.media.vaultMount);
+    const requiredPaths = await Promise.all(APP_CONFIG.media.requiredPaths.map(async target => {
+        const found = mount(target);
+        return { path: target, present: Boolean(found), exists: await exists(target), fsType: found?.fsType || null, source: found?.source || null };
+    }));
+    const vault = (options.vaultStateTracker || vaultStateTracker).classify({
+        mapper: mapperPresent,
+        marker: markerPresent,
+        vaultMount: { present: Boolean(foundVaultMount), source: foundVaultMount?.source || null, fsType: foundVaultMount?.fsType || null },
+        expectedVaultSource: APP_CONFIG.media.vaultMapper,
+        bindMounts: requiredPaths,
+        cloudMounts,
+        dependentServices: rawMediaServices,
+    }, now);
+    Object.assign(vault, {
+        mapperPresent,
+        markerPresent,
+        mountPresent: Boolean(foundVaultMount),
+        mountSource: foundVaultMount?.source || null,
+        mountFsType: foundVaultMount?.fsType || null,
+        mountSourceCorrect: foundVaultMount?.source === APP_CONFIG.media.vaultMapper,
+        expectedMountSource: APP_CONFIG.media.vaultMapper,
+        requiredPaths,
     });
-    vault.mapperPresent = await exists(APP_CONFIG.media.vaultMapper);
-    vault.markerPresent = await exists(APP_CONFIG.media.vaultMarker);
-    vault.mountPresent = Boolean(mount(APP_CONFIG.media.vaultMount));
-    vault.requiredPaths = await Promise.all(APP_CONFIG.media.requiredPaths.map(async target => ({ path: target, present: Boolean(mount(target)), exists: await exists(target) })));
+    if (!vault.mountPresent) {
+        const vaultUsage = usage.find(item => item.path === APP_CONFIG.media.vaultMount);
+        if (vaultUsage) Object.assign(vaultUsage, { available: false, totalBytes: null, usedBytes: null, freeBytes: null, usedPct: null, severity: 'inactive' });
+    }
+    const topology = { ...vault, cloudMounts, requiredPaths };
+    const mediaServices = interpretMediaServices(rawMediaServices, vault, topology);
+    const mediaSummary = deriveMediaSummary(vault, mediaServices);
     const reconciled = reconcileProviders(reminderState, cloud.providers.map(provider => provider.id));
     if (cloud.available && JSON.stringify(reconciled) !== JSON.stringify(reminderState)) {
         await writeJsonAtomic(APP_CONFIG.media.reminderStatePath, reconciled).catch(() => {});
@@ -168,11 +202,8 @@ export async function collectLiveMedia(options = {}) {
         usage.push({ path: 'zram', label: 'zram', totalBytes: total, usedBytes: used, freeBytes: total - used, usedPct, severity: usedPct >= 95 ? 'critical' : usedPct >= 80 ? 'warning' : 'healthy' });
     }
     const criticalFailures = [];
-    if (vault.state !== 'locked') {
-        for (const service of mediaServices.filter(item => item.state !== 'active')) criticalFailures.push({ id: service.name, vaultDependent: true });
-        for (const item of cloudMounts.filter(item => !item.present || !item.fuse)) criticalFailures.push({ id: item.path, vaultDependent: true });
-        for (const item of vault.requiredPaths.filter(item => !item.present)) criticalFailures.push({ id: item.path, vaultDependent: true });
-    }
+    for (const service of mediaServices.filter(item => item.severity === 'critical')) criticalFailures.push({ id: service.name, vaultDependent: true });
+    if (vault.state === 'inconsistent') criticalFailures.push({ id: 'vault-topology', vaultDependent: true });
     if (!unitResult.available) criticalFailures.push({ id: 'systemd-unavailable', vaultDependent: false });
     if (!system) criticalFailures.push({ id: 'system-metrics-unavailable', vaultDependent: false });
     if (health.severity === 'critical') criticalFailures.push({ id: 'pool-health', vaultDependent: false });
@@ -185,14 +216,25 @@ export async function collectLiveMedia(options = {}) {
         ...usage.filter(item => item.severity === 'warning').map(item => `space-${item.path}`),
         ...usage.filter(item => item.available === false && !(vault.intentionalLock && item.path === APP_CONFIG.media.vaultMount)).map(item => `capacity-${item.path}`),
         ...(!cloud.available ? ['cloud-cache'] : []),
+        ...mediaServices.filter(item => item.severity === 'warning').map(item => `service-${item.name}`),
     ];
     return {
         generatedAt: now, available: true,
         overall: calculateOverallStatus({ vault, criticalFailures, attention }),
-        vault, cloudMounts, services: mediaServices, systemdAvailable: unitResult.available,
+        vault, media: mediaSummary, cloudMounts, services: mediaServices, systemdAvailable: unitResult.available,
         system: system ? { uptimeSeconds: os.uptime(), cpuLoadPct: Number(system[0].currentLoad.toFixed(1)), memoryUsedBytes: system[1].active || system[1].used, memoryTotalBytes: system[1].total, zramUsedBytes: system[1].swapused, zramTotalBytes: system[1].swaptotal, temperatureC: system[2].main || null } : { available: false },
         capacity: usage, providers, cloudAvailable: cloud.available, cloudError: cloud.error || null,
         aggregates: aggregateQuotas(providers), health, diagnostics: recentDiagnostics,
+        evidence: {
+            systemd: rawMediaServices.map(service => ({ name: service.name, ...service.raw })),
+            mounts: [
+                { path: APP_CONFIG.media.vaultMount, present: Boolean(foundVaultMount), source: foundVaultMount?.source || null, fsType: foundVaultMount?.fsType || null },
+                ...requiredPaths,
+                ...cloudMounts,
+            ],
+            mapper: { path: APP_CONFIG.media.vaultMapper, present: mapperPresent },
+            marker: { path: APP_CONFIG.media.vaultMarker, present: markerPresent },
+        },
         reminderStateVersion: reconciled.version,
     };
 }

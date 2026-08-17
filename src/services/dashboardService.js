@@ -17,7 +17,7 @@ function mergeOverviewCore(base, services, storage, dns, network) {
     const mounts = storage.mounts || [];
     const interfaces = network.interfaces || [];
     const serviceMatrix = [
-        ...systemd.map(service => ({
+        ...systemd.filter(service => service.category !== 'media').map(service => ({
             name: service.name,
             label: service.label,
             kind: 'systemd',

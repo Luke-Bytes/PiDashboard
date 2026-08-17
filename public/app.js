@@ -60,7 +60,11 @@ function renderOverview() {
     const overview = state.overviewCore; if (!overview) return;
     const summary = overview.summary || {}; const alerts = overview.alerts || []; const media = state.media;
     const hostCritical = alerts.some(alert => alert.level === 'critical');
-    const overall = hostCritical ? { label: 'Degraded', severity: 'critical' } : (media?.overall || { label: alerts.length ? 'Attention' : 'Healthy', severity: alerts.length ? 'warning' : 'healthy' });
+    const overall = hostCritical || media?.overall?.severity === 'critical'
+        ? { label: 'Degraded', severity: 'critical' }
+        : alerts.length || media?.overall?.severity === 'warning'
+            ? { label: 'Attention', severity: 'warning' }
+            : { label: 'Healthy', severity: 'healthy' };
     const pill = document.getElementById('globalStatus'); pill.className = `status-pill ${safeSeverity(overall.severity)}`; pill.textContent = overall.label;
     setText('dataMode', overview.meta?.dataMode || 'live'); setText('lastUpdated', `Updated ${new Date(overview.generatedAt).toLocaleTimeString()}`);
     setHtml('summaryMetrics', [
@@ -83,12 +87,12 @@ function renderOverviewMedia() {
     const media = state.media;
     if (!media) { setHtml('overviewMediaCards', '<article class="card"><div class="empty-state">Loading media health…</div></article>'); return; }
     const vaultCapacity = media.capacity?.find(item => item.label === 'Vault'); const nextReminder = [...(media.providers || [])].filter(item => item.reminder?.severity === 'warning').sort((a, b) => (a.reminder.daysUntil ?? -999) - (b.reminder.daysUntil ?? -999))[0];
-    const aggregate = media.aggregates || {}; const activeServices = (media.services || []).filter(item => item.state === 'active').length;
+    const aggregate = media.aggregates || {}; const onlineServices = (media.services || []).filter(item => item.classification === 'Online').length;
     setHtml('overviewMediaCards', [
         metric('Overall', media.overall?.label || 'Unavailable', `${(media.services || []).length} media services`),
-        metric('Vault', media.vault?.state || 'Unavailable', vaultCapacity?.available === false ? 'Capacity unavailable' : `${formatBytes(vaultCapacity?.freeBytes)} free`),
+        metric('Vault', media.vault?.classification || 'Unavailable', media.vault?.detail || (vaultCapacity?.available === false ? 'Capacity unavailable' : `${formatBytes(vaultCapacity?.freeBytes)} free`)),
         metric('Cloud aggregate', formatBytes(aggregate.free), `${aggregate.partial ? 'Partial • ' : ''}${aggregate.reportedProviders || 0}/${aggregate.totalProviders || 0} reporting`),
-        metric('Media services', `${activeServices}/${(media.services || []).length} active`, `${(media.cloudMounts || []).filter(item => item.fuse).length}/${(media.cloudMounts || []).length} FUSE mounts`),
+        metric('Media', media.media?.label || 'Unavailable', `${onlineServices}/${(media.services || []).length} services online`),
         metric('Weekly health', media.health?.state || 'Unavailable', `Next ${formatTime(media.health?.timer?.nextRun)}`),
         metric('Next login reminder', nextReminder?.id || 'None', nextReminder?.reminder?.label || 'All current'),
     ].map(content => `<article class="card overview-mini">${content}</article>`).join(''));
@@ -104,8 +108,8 @@ function renderMedia() {
     const media = state.media; if (!media) return; const overall = media.overall || { label: 'Degraded', severity: 'critical' };
     const pill = document.getElementById('mediaStatus'); pill.className = `status-pill ${safeSeverity(overall.severity)}`; pill.textContent = overall.label;
     const vault = media.vault || {};
-    setHtml('vaultLifecycle', listItem('Vault state', vault.state || 'unavailable', vault.severity, `Mapper ${vault.mapperPresent ? 'present' : 'absent'} • marker ${vault.markerPresent ? 'present' : 'absent'} • mount ${vault.mountPresent ? 'present' : 'absent'}`) + renderList(vault.requiredPaths || [], item => listItem(item.path, item.present ? 'present' : 'missing', item.present ? 'healthy' : 'critical')));
-    setHtml('mediaServices', renderList(media.services || [], service => listItem(service.label, service.state, service.state === 'active' ? 'healthy' : 'critical', `${formatDuration(service.uptimeSeconds)} • ${service.restarts ?? 0} restarts • ${formatBytes(service.memoryBytes)}`)) + renderList(media.cloudMounts || [], mount => listItem(mount.path, mount.present ? (mount.fuse ? 'FUSE mounted' : 'wrong filesystem') : 'absent', mount.present && mount.fuse ? 'healthy' : 'critical', mount.fsType || 'No mount')));
+    setHtml('vaultLifecycle', listItem('Vault state', vault.classification || 'Unavailable', vault.severity, vault.detail || `Mapper ${vault.mapperPresent ? 'present' : 'absent'} • marker ${vault.markerPresent ? 'present' : 'absent'} • mount ${vault.mountPresent ? 'present' : 'absent'}`) + renderList(vault.requiredPaths || [], item => listItem(item.path, item.present ? 'Mounted' : 'Absent', item.present ? 'healthy' : vault.state === 'closed' ? 'inactive' : 'critical', item.present ? `${item.fsType || 'unknown'} • ${item.source || 'unknown source'}` : 'No mount')));
+    setHtml('mediaServices', listItem('Media summary', media.media?.label || 'Unknown', media.media?.severity, 'Vault-aware service interpretation') + renderList(media.services || [], service => listItem(service.label, service.classification || 'Unknown', service.severity, service.detail || `${formatDuration(service.uptimeSeconds)} • ${service.restarts ?? 0} restarts`)) + renderList(media.cloudMounts || [], mount => listItem(mount.path, mount.present ? (mount.fuse ? 'FUSE mounted' : 'Wrong filesystem') : 'Absent', mount.present && mount.fuse ? 'healthy' : vault.state === 'closed' ? 'inactive' : 'critical', mount.present ? `${mount.fsType || 'unknown'} • ${mount.source || 'unknown source'}` : 'No mount')));
     const aggregate = media.aggregates || {};
     setHtml('cloudAggregate', `${metric(aggregate.partial ? 'Reported aggregate (partial)' : 'Reported aggregate', formatBytes(aggregate.total), `${formatBytes(aggregate.free)} free • ${aggregate.reportedProviders || 0}/${aggregate.totalProviders || 0} providers`)}${metric('Largest reported provider free', formatBytes(aggregate.largestProviderFree?.bytes), aggregate.largestProviderFree?.provider || 'No reported quota')}<p class="fine-print">Single-file upper bound only. Actual placement is lower because of rclone crypt overhead and the importer safety margin.</p>`);
     const health = media.health || {};
@@ -116,12 +120,18 @@ function renderMedia() {
         return `<article class="provider-card"><div class="list-top"><div class="list-title mono">${esc(provider.id)}</div>${badge(provider.reachability, provider.reachability === 'ok' ? 'healthy' : provider.reachability === 'failed' ? 'critical' : 'inactive')}</div>${capacityBar(quota.used, quota.total)}<div class="provider-stats"><span>${esc(formatBytes(quota.free))} free</span><span>${esc(formatBytes(quota.total))} total</span></div><div class="list-meta">Quota success: ${esc(formatTime(provider.lastSuccess))}${provider.errorCategory ? ` • ${esc(provider.errorCategory)}` : ''}</div><div class="reminder-row">${badge(reminder.label || 'Login date not recorded', reminder.severity)}<button class="ghost-button" data-provider-login="${esc(provider.id)}">I logged in today</button></div></article>`;
     }, media.cloudError || 'No active providers in the cached registry.'));
     setHtml('mediaDiagnostics', renderList(media.diagnostics || [], message => `<div class="event-item mono">${esc(message)}</div>`, 'No recent media errors.'));
+    const evidence = media.evidence || {};
+    setHtml('mediaEvidence', renderList(evidence.systemd || [], unit => `<div class="event-item mono">${esc(Object.entries(unit).map(([key, value]) => `${key}=${value ?? ''}`).join(' • '))}</div>`, 'No raw systemd evidence.') + renderList(evidence.mounts || [], mount => `<div class="event-item mono">${esc(`${mount.path}: ${mount.present ? 'present' : 'absent'} • ${mount.fsType || 'no filesystem'} • ${mount.source || 'no source'}`)}</div>`, 'No mount evidence.'));
     document.querySelectorAll('[data-provider-login]').forEach(button => { button.onclick = async () => { const provider = button.getAttribute('data-provider-login'); button.disabled = true; try { await postJson(`${apiBase}/media/providers/${encodeURIComponent(provider)}/login`); state.media = await fetchJson(endpoints.media); renderMedia(); renderOverviewMedia(); } catch (error) { showGlobalError(error); } finally { button.disabled = false; } }; });
 }
 
 function renderServices() {
     const services = state.services || {};
-    renderTable('systemdTable', ['Service', 'State', 'Subtype', 'Role', 'Critical'], (services.systemd || []).map(item => `<div class="table-row"><div><div class="list-title">${esc(item.label)}</div><div class="list-meta mono">${esc(item.name)}</div></div><div>${badge(item.state, item.severity)}</div><div>${esc(item.subState)}</div><div>${esc(item.category)}</div><div>${item.critical ? 'Yes' : 'No'}</div></div>`));
+    const mediaServices = new Map((state.media?.services || []).map(item => [item.name.replace(/\.service$/, ''), item]));
+    renderTable('systemdTable', ['Service', 'State', 'Subtype', 'Role', 'Critical'], (services.systemd || []).map(item => {
+        const interpreted = mediaServices.get(item.name.replace(/\.service$/, ''));
+        return `<div class="table-row"><div><div class="list-title">${esc(item.label)}</div><div class="list-meta mono">${esc(item.name)}</div></div><div>${badge(interpreted?.classification || item.state, interpreted?.severity || item.severity)}</div><div>${esc(interpreted?.detail || item.subState)}</div><div>${esc(item.category)}</div><div>${item.critical ? 'Yes' : 'No'}</div></div>`;
+    }));
     renderTable('pm2Table', ['App', 'State', 'Restarts', 'Memory', 'Route'], (services.pm2 || []).map(item => `<div class="table-row"><div><div class="list-title">${esc(item.label || item.name)}</div><div class="list-meta mono">${esc(item.cwd || item.name)}</div></div><div>${badge(item.state, item.severity)}</div><div>${esc(item.restarts)}</div><div>${esc(item.memoryMiB)} MiB</div><div>${esc(item.proxyPath || item.proxyHost || item.port)}</div></div>`));
 }
 function renderProxy() { const value = state.proxy || {}; renderTable('proxyTable', ['Route', 'Public URL', 'Upstream', 'Mode', 'Status'], (value.routes || []).map(item => `<div class="table-row wide"><div><div class="list-title">${esc(item.label)}</div><div class="list-meta mono">${esc(`${item.host}${item.publicPath}`)}</div></div><div>${esc(item.publicUrl || `${item.host}${item.publicPath}`)}</div><div>${esc(item.target)}</div><div>${esc(item.healthMode || 'http')}</div><div>${badge(item.probe ? (item.probe.ok ? item.probe.status : 'fail') : 'static', item.severity)}</div></div>`)); }
@@ -146,13 +156,13 @@ function renderPolicy() {
 }
 function renderPolicyInspect() { const item = state.policyInspect; setText('policyStructuredOutput', item?.structuredText || 'Run a report to generate a structured brief.'); setText('policyRawOutput', item?.rawText || 'Run a report to capture raw output.'); document.getElementById('copyPolicyStructured').onclick = item ? () => copyText(item.structuredText, 'Policy structured brief') : null; document.getElementById('copyPolicyRaw').onclick = item ? () => copyText(item.rawText, 'Policy raw output') : null; }
 
-function buildOverviewBrief() { const core = state.overviewCore || {}; const media = state.media || {}; return ['# Pi Dashboard Overview Brief', `Generated: ${new Date().toLocaleString()}`, `Overall: ${media.overall?.label || 'Unavailable'}`, `Host: ${core.summary?.hostname || 'Unavailable'}`, `Vault: ${media.vault?.state || 'Unavailable'}`, `Media: ${(media.services || []).map(item => `${item.label}=${item.state}`).join(', ') || 'Unavailable'}`, `Cloud: ${formatBytes(media.aggregates?.free)} free${media.aggregates?.partial ? ' (partial)' : ''}`].join('\n\n'); }
+function buildOverviewBrief() { const core = state.overviewCore || {}; const media = state.media || {}; return ['# Pi Dashboard Overview Brief', `Generated: ${new Date().toLocaleString()}`, `Overall: ${media.overall?.label || 'Unavailable'}`, `Host: ${core.summary?.hostname || 'Unavailable'}`, `Vault: ${media.vault?.classification || 'Unavailable'}`, `Media: ${media.media?.label || 'Unavailable'} — ${(media.services || []).map(item => `${item.label}=${item.classification || 'Unknown'}`).join(', ') || 'Unavailable'}`, `Cloud: ${formatBytes(media.aggregates?.free)} free${media.aggregates?.partial ? ' (partial)' : ''}`].join('\n\n'); }
 function buildPolicyBrief() { const runtime = state.policy?.runtime || {}; return ['# Policy Service Brief', `Generated: ${new Date().toLocaleString()}`, `State: ${runtime.state || 'Unavailable'}`, `Uptime: ${formatDuration(runtime.uptimeSeconds)}`, `Restarts: ${runtime.restarts ?? '—'}`].join('\n\n'); }
 
 const pageLoaders = {
     overview: async () => { const [core, media] = await Promise.all([fetchJson(endpoints.overviewCore), fetchJson(endpoints.media)]); state.overviewCore = core; state.media = media; renderOverview(); fetchJson(endpoints.overviewExtended).then(value => { state.overviewExtended = value; renderOverviewExtended(); }).catch(showGlobalError); },
     media: async () => { state.media = await fetchJson(endpoints.media); renderMedia(); },
-    policy: async () => { state.policy = await fetchJson(endpoints.policy); renderPolicy(); }, services: async () => { state.services = await fetchJson(endpoints.services); renderServices(); },
+    policy: async () => { state.policy = await fetchJson(endpoints.policy); renderPolicy(); }, services: async () => { [state.services, state.media] = await Promise.all([fetchJson(endpoints.services), fetchJson(endpoints.media)]); renderServices(); },
     proxy: async () => { state.proxy = await fetchJson(endpoints.proxy); renderProxy(); }, storage: async () => { state.storage = await fetchJson(endpoints.storage); renderStorage(); },
     network: async () => { state.network = await fetchJson(endpoints.network); renderNetwork(); },
     dns: async () => { [state.dns, state.maintenance] = await Promise.all([fetchJson(endpoints.dns), fetchJson(endpoints.maintenance)]); renderDns(); },

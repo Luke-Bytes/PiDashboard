@@ -227,18 +227,19 @@ export const evidenceSnapshot = {
         available: true,
         overall: { label: 'Attention', severity: 'warning' },
         vault: {
-            state: 'unlocked', severity: 'healthy', intentionalLock: false,
-            mapperPresent: true, markerPresent: true, mountPresent: true,
-            requiredPaths: [{ path: '/media', present: true }, { path: '/var/lib/jellyfin', present: true }],
+            state: 'open', classification: 'Open', severity: 'healthy', intentionalLock: false, detail: 'All required vault and media mounts are present',
+            mapperPresent: true, markerPresent: true, mountPresent: true, mountSource: '/dev/mapper/securevault', mountSourceCorrect: true,
+            requiredPaths: [{ path: '/media', present: true, fsType: 'none', source: '/srv/secure/media' }, { path: '/var/lib/jellyfin', present: true, fsType: 'none', source: '/srv/secure/jellyfin' }],
         },
+        media: { state: 'online', label: 'Online', severity: 'healthy' },
         cloudMounts: [
-            { path: '/media/ocean', present: true, fuse: true, fsType: 'fuse.rclone' },
-            { path: '/media/pool', present: true, fuse: true, fsType: 'fuse.rclone' },
+            { path: '/mnt/jellyfin-cloud/ocean-source', role: 'ocean', present: true, fuse: true, fsType: 'fuse.rclone', source: 'ocean:' },
+            { path: '/srv/secure/cloud/pool', role: 'pool', present: true, fuse: true, fsType: 'fuse.rclone', source: 'pool:' },
         ],
         services: [
-            { name: 'jellyfin.service', label: 'Jellyfin', state: 'active', subState: 'running', uptimeSeconds: 604800, restarts: 0, memoryBytes: 536870912, cpuSeconds: 8200 },
-            { name: 'rclone-ocean.service', label: 'Ocean', state: 'active', subState: 'running', uptimeSeconds: 604800, restarts: 0, memoryBytes: 94371840, cpuSeconds: 1400 },
-            { name: 'rclone-jellyfin-pool.service', label: 'Jellyfin Pool', state: 'active', subState: 'running', uptimeSeconds: 604800, restarts: 0, memoryBytes: 125829120, cpuSeconds: 2100 },
+            { name: 'jellyfin.service', label: 'Jellyfin', state: 'active', subState: 'running', classification: 'Online', running: true, expected: true, healthy: true, severity: 'healthy', detail: 'Running with all required vault mounts', uptimeSeconds: 604800, restarts: 0, memoryBytes: 536870912, cpuSeconds: 8200 },
+            { name: 'rclone-ocean.service', label: 'Ocean', state: 'active', subState: 'running', classification: 'Online', running: true, expected: true, healthy: true, severity: 'healthy', detail: 'Expected FUSE mount is present', uptimeSeconds: 604800, restarts: 0, memoryBytes: 94371840, cpuSeconds: 1400 },
+            { name: 'rclone-jellyfin-pool.service', label: 'Jellyfin Pool', state: 'active', subState: 'running', classification: 'Online', running: true, expected: true, healthy: true, severity: 'healthy', detail: 'Expected FUSE mount is present', uptimeSeconds: 604800, restarts: 0, memoryBytes: 125829120, cpuSeconds: 2100 },
         ],
         systemdAvailable: true,
         system: { uptimeSeconds: 2420000, cpuLoadPct: 9.4, memoryUsedBytes: 2254857830, memoryTotalBytes: 8482560409, zramUsedBytes: 214748364, zramTotalBytes: 4187593113, temperatureC: 45.5 },
@@ -257,6 +258,20 @@ export const evidenceSnapshot = {
         aggregates: { reportedProviders: 2, totalProviders: 2, partial: false, total: 3298534883328, used: 1099511627776, free: 2199023255552, largestProviderFree: { provider: 'ocean-a', bytes: 1374389534720 } },
         health: { state: 'healthy', severity: 'healthy', timer: { state: 'active', lastTrigger: new Date(now - 86400000).toISOString(), nextRun: new Date(now + 6 * 86400000).toISOString() }, service: { result: 'success' } },
         diagnostics: [],
+        evidence: {
+            systemd: [
+                { name: 'jellyfin.service', Id: 'jellyfin.service', ActiveState: 'active', SubState: 'running', Result: 'success', ExecMainCode: 'exited', ExecMainStatus: '0' },
+                { name: 'rclone-ocean.service', Id: 'rclone-ocean.service', ActiveState: 'active', SubState: 'running', Result: 'success', ExecMainCode: 'exited', ExecMainStatus: '0' },
+                { name: 'rclone-jellyfin-pool.service', Id: 'rclone-jellyfin-pool.service', ActiveState: 'active', SubState: 'running', Result: 'success', ExecMainCode: 'exited', ExecMainStatus: '0' },
+            ],
+            mounts: [
+                { path: '/srv/secure', present: true, fsType: 'ext4', source: '/dev/mapper/securevault' },
+                { path: '/media', present: true, fsType: 'none', source: '/srv/secure/media' },
+                { path: '/var/lib/jellyfin', present: true, fsType: 'none', source: '/srv/secure/jellyfin' },
+                { path: '/mnt/jellyfin-cloud/ocean-source', present: true, fsType: 'fuse.rclone', source: 'ocean:' },
+                { path: '/srv/secure/cloud/pool', present: true, fsType: 'fuse.rclone', source: 'pool:' },
+            ],
+        },
         reminderStateVersion: 1,
     },
     policy: {
