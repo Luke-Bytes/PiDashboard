@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createApiRouter } from './routes/api.js';
+import { sameOriginOnly } from './middleware/sameOrigin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +13,7 @@ export function createApp() {
     const app = express();
     app.disable('x-powered-by');
     app.use(express.json());
+    app.use(sameOriginOnly);
 
     app.use('/api', createApiRouter());
 
@@ -20,7 +22,7 @@ export function createApp() {
 
     app.use((err, _req, res, _next) => {
         const message = err instanceof Error ? err.message : String(err);
-        res.status(500).json({ error: message });
+        res.status(err?.statusCode || 500).json({ error: message });
     });
 
     return app;

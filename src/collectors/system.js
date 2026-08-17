@@ -2,10 +2,9 @@ import os from 'node:os';
 import si from 'systeminformation';
 
 import { APP_CONFIG } from '../config/settings.js';
-import { CRITICAL_MOUNTS, NETWORK_INTERFACES, PROXY_ROUTES } from '../config/topology.js';
+import { CRITICAL_MOUNTS } from '../config/topology.js';
 import { withDataSource } from '../lib/dataSource.js';
 import { bytesToGiB, pickSeverity } from '../lib/format.js';
-import { normalizeInterfaceState } from '../lib/networkState.js';
 
 function normalizeMount(fsEntry) {
     const usedGiB = bytesToGiB(fsEntry.used);
@@ -27,14 +26,12 @@ function normalizeMount(fsEntry) {
 
 async function collectLiveOverview() {
     try {
-        const [load, mem, temp, cpu, fsSize, netIfs, netStats] = await Promise.all([
+        const [load, mem, temp, cpu, fsSize] = await Promise.all([
             si.currentLoad(),
             si.mem(),
             si.cpuTemperature(),
             si.cpu(),
             si.fsSize(),
-            si.networkInterfaces(),
-            si.networkStats(),
         ]);
 
         const mounts = fsSize
@@ -44,22 +41,6 @@ async function collectLiveOverview() {
 
         const rootMount = mounts.find(item => item.mount === '/');
         const secureMount = mounts.find(item => item.mount === '/srv/secure');
-        const interfaces = NETWORK_INTERFACES.map(meta => {
-            const iface = netIfs.find(item => item.iface === meta.name);
-            const stats = netStats.find(item => item.iface === meta.name);
-            const normalized = normalizeInterfaceState(meta, iface);
-            return {
-                name: meta.name,
-                label: meta.label,
-                state: normalized.state,
-                address: iface?.ip4subnet ? `${iface.ip4}/${iface.ip4subnet}` : iface?.ip4 || '—',
-                role: meta.role,
-                rxMbps: Number(((stats?.rx_sec || 0) / 1024 / 1024).toFixed(2)),
-                txMbps: Number(((stats?.tx_sec || 0) / 1024 / 1024).toFixed(2)),
-                severity: normalized.severity,
-            };
-        });
-
         const alerts = [];
         if (rootMount?.usedPct >= 90) {
             alerts.push({
@@ -92,7 +73,7 @@ async function collectLiveOverview() {
                 secureUsedPct: secureMount?.usedPct ?? null,
                 dnsHealthy: null,
                 proxyHealthy: null,
-                vpnHealthy: interfaces.every(item => item.state === 'up'),
+                vpnHealthy: null,
             },
             alerts,
             serviceMatrix: [],
@@ -108,7 +89,7 @@ async function collectLiveOverview() {
                 listeners: [],
                 severity: 'warning',
             },
-            network: { interfaces },
+            network: { interfaces: [] },
             maintenance: { overdue: 0, timers: [] },
             recentEvents: [],
             meta: { dataMode: APP_CONFIG.dataMode },

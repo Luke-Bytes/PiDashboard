@@ -1,9 +1,8 @@
-const DATA_MODE = process.env.DASHBOARD_DATA_MODE || 'auto';
+const DATA_MODE = process.env.DASHBOARD_DATA_MODE || 'live';
 
 export function shouldUseFixtureData() {
     if (DATA_MODE === 'fixture') return true;
-    if (DATA_MODE === 'live') return false;
-    return !(process.platform === 'linux' && process.arch === 'arm64');
+    return false;
 }
 
 export const APP_CONFIG = {
@@ -19,4 +18,18 @@ export const APP_CONFIG = {
     publicBaseUrl: process.env.DASHBOARD_PUBLIC_BASE_URL || 'https://anniwars.win',
     piholeApiUrl: process.env.PIHOLE_API_URL || '',
     piholeApiToken: process.env.PIHOLE_API_TOKEN || '',
+    mediaTtlMs: 15000,
+    mediaSlowTtlMs: 60000,
+    media: {
+        vaultMapper: process.env.MEDIA_VAULT_MAPPER || '/dev/mapper/securevault',
+        vaultMarker: process.env.MEDIA_VAULT_MARKER || '/run/securevault-unlocked',
+        vaultMount: process.env.MEDIA_VAULT_MOUNT || '/srv/secure',
+        poolMount: process.env.MEDIA_POOL_MOUNT || '/media/pool',
+        oceanMount: process.env.MEDIA_OCEAN_MOUNT || '/media/ocean',
+        requiredPaths: (process.env.MEDIA_REQUIRED_PATHS || '/media,/var/lib/jellyfin').split(',').filter(Boolean),
+        transcodePath: process.env.JELLYFIN_TRANSCODE_PATH || '/var/cache/jellyfin/transcodes',
+        cloudCachePath: process.env.CLOUD_STATUS_CACHE || '/var/lib/pi-dashboard/cloud-status.json',
+        reminderStatePath: process.env.PROVIDER_REMINDER_STATE || '/var/lib/pi-dashboard/provider-reminders.json',
+        healthStaleMs: Number(process.env.MEDIA_HEALTH_STALE_MS || 9 * 24 * 60 * 60 * 1000),
+    },
 };

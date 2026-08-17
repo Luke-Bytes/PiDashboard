@@ -14,6 +14,7 @@ import {
     getStorage,
 } from '../services/dashboardService.js';
 import { getPolicy, runPolicyAction, runPolicyInspectReport } from '../services/policyService.js';
+import { getMedia, recordProviderLogin } from '../services/mediaService.js';
 
 export function createApiRouter() {
     const router = express.Router();
@@ -49,6 +50,22 @@ export function createApiRouter() {
     router.get('/services', async (_req, res, next) => {
         try {
             res.json(await getServices());
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.get('/media', async (_req, res, next) => {
+        try {
+            res.json(await getMedia());
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.post('/media/providers/:provider/login', async (req, res, next) => {
+        try {
+            res.json(await recordProviderLogin(req.params.provider));
         } catch (error) {
             next(error);
         }

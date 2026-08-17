@@ -1,11 +1,12 @@
 import { CRITICAL_SYSTEMD_SERVICES, PM2_APP_METADATA } from '../config/topology.js';
+import os from 'node:os';
 import { withDataSource } from '../lib/dataSource.js';
 import { runCommand } from '../lib/command.js';
 import { bytesToMiB, normalizeStateSeverity } from '../lib/format.js';
 
 async function collectSystemd() {
-    const result = await runCommand('systemctl', ['show', ...CRITICAL_SYSTEMD_SERVICES.map(item => item.name), '--property=Id,ActiveState,SubState,ActiveEnterTimestampMonotonic']);
-    if (!result.ok || !result.stdout) return null;
+    const result = await runCommand('systemctl', ['show', ...CRITICAL_SYSTEMD_SERVICES.map(item => item.name), '--property=Id,ActiveState,SubState,ActiveEnterTimestampMonotonic,NRestarts,MemoryCurrent,CPUUsageNSec']);
+    if (!result.stdout) return null;
 
     const blocks = result.stdout.split('\n\n').filter(Boolean);
     return blocks.map(block => {
@@ -13,13 +14,18 @@ async function collectSystemd() {
             const [key, ...rest] = line.split('=');
             return [key, rest.join('=')];
         }));
-        const meta = CRITICAL_SYSTEMD_SERVICES.find(item => item.name === fields.Id);
+        const meta = CRITICAL_SYSTEMD_SERVICES.find(item => item.name === fields.Id || `${item.name}.service` === fields.Id);
+        const activeSinceUs = Number(fields.ActiveEnterTimestampMonotonic || 0);
+        const uptimeUs = os.uptime() * 1_000_000 - activeSinceUs;
         return {
             name: fields.Id,
             label: meta?.label || fields.Id,
             state: fields.ActiveState || 'unknown',
             subState: fields.SubState || 'unknown',
-            uptimeSeconds: null,
+            uptimeSeconds: activeSinceUs > 0 ? Math.max(0, Math.round(uptimeUs / 1_000_000)) : null,
+            restarts: Number(fields.NRestarts || 0),
+            memoryMiB: fields.MemoryCurrent && fields.MemoryCurrent !== '[not set]' ? bytesToMiB(Number(fields.MemoryCurrent)) : null,
+            cpuSeconds: fields.CPUUsageNSec && fields.CPUUsageNSec !== '[not set]' ? Number((Number(fields.CPUUsageNSec) / 1e9).toFixed(1)) : null,
             critical: Boolean(meta?.critical),
             category: meta?.category || 'system',
             severity: normalizeStateSeverity(fields.ActiveState, meta?.critical),

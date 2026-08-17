@@ -12,7 +12,7 @@ import { getServices, clearAllCaches } from './dashboardService.js';
 const cache = new TtlCache();
 
 function findPolicyApp(services) {
-    return services.pm2.find(app => app.name === 'policy') || null;
+    return (services.pm2 || []).find(app => app.name === 'policy') || null;
 }
 
 async function readPolicyLogs() {
@@ -79,7 +79,12 @@ export async function getPolicy(force = false) {
     if (shouldUseFixtureData()) return structuredClone(evidenceSnapshot.policy);
     return cache.get('policy', APP_CONFIG.standardTtlMs, async () => {
         const live = await collectLivePolicy();
-        return live || structuredClone(evidenceSnapshot.policy);
+        return live || {
+            generatedAt: Date.now(),
+            available: false,
+            status: 'unavailable',
+            error: 'policy live collection unavailable',
+        };
     });
 }
 

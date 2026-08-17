@@ -12,15 +12,19 @@ import { collectOverviewBase } from '../collectors/system.js';
 const cache = new TtlCache();
 
 function mergeOverviewCore(base, services, storage, dns, network) {
+    const systemd = services.systemd || [];
+    const pm2 = services.pm2 || [];
+    const mounts = storage.mounts || [];
+    const interfaces = network.interfaces || [];
     const serviceMatrix = [
-        ...services.systemd.map(service => ({
+        ...systemd.map(service => ({
             name: service.name,
             label: service.label,
             kind: 'systemd',
             state: service.state,
             severity: service.severity,
         })),
-        ...services.pm2.filter(app => app.critical).map(app => ({
+        ...pm2.filter(app => app.critical).map(app => ({
             name: app.name,
             label: app.label,
             kind: 'pm2',
@@ -30,8 +34,16 @@ function mergeOverviewCore(base, services, storage, dns, network) {
     ];
 
     const alerts = [
-        ...base.alerts,
-        ...storage.mounts.filter(mount => mount.severity === 'critical').map(mount => ({
+        ...(base.alerts || []),
+        ...[
+            ['system', base], ['services', services], ['storage', storage], ['DNS', dns], ['network', network],
+        ].filter(([, value]) => value?.available === false).map(([label]) => ({
+            id: `collector-${label.toLowerCase()}`,
+            level: 'critical',
+            title: `${label} status unavailable`,
+            detail: 'Live collection failed; fixture data was not substituted.',
+        })),
+        ...mounts.filter(mount => mount.severity === 'critical').map(mount => ({
             id: `mount-${mount.mount}`,
             level: 'critical',
             title: `${mount.label} is ${mount.usedPct}% full`,
@@ -51,7 +63,7 @@ function mergeOverviewCore(base, services, storage, dns, network) {
             ...base.summary,
             dnsHealthy: dns.ftlState === 'active' && dns.unboundState === 'active',
             proxyHealthy: null,
-            vpnHealthy: network.interfaces.every(iface => iface.state === 'up'),
+            vpnHealthy: interfaces.length > 0 && interfaces.every(iface => iface.state === 'up'),
             queryRatePerMinute: dns.queryRatePerMinute,
             blockedPct: dns.blockedPct,
         },
@@ -59,7 +71,7 @@ function mergeOverviewCore(base, services, storage, dns, network) {
         serviceMatrix,
         proxy: null,
         storage: {
-            mounts: storage.mounts.slice(0, 3),
+            mounts: mounts.slice(0, 3),
         },
         dns: {
             piholeEnabled: dns.piholeEnabled,
@@ -72,7 +84,7 @@ function mergeOverviewCore(base, services, storage, dns, network) {
             severity: dns.ftlState === 'active' && dns.unboundState === 'active' ? 'healthy' : 'critical',
         },
         network: {
-            interfaces: network.interfaces,
+            interfaces,
         },
         maintenance: null,
         recentEvents: (services.restartEvents || []).slice(0, 5),
@@ -84,7 +96,7 @@ function mergeOverviewCore(base, services, storage, dns, network) {
 }
 
 function mergeOverviewExtended(proxy, maintenance, logs) {
-    const proxyRoutes = proxy.routes.map(route => ({
+    const proxyRoutes = (proxy.routes || []).map(route => ({
         id: route.id,
         label: route.label,
         host: route.host,
@@ -99,15 +111,15 @@ function mergeOverviewExtended(proxy, maintenance, logs) {
     return {
         generatedAt: Date.now(),
         summary: {
-            proxyHealthy: proxyRoutes.filter(route => route.healthMode === 'http').every(route => route.severity === 'healthy'),
+            proxyHealthy: proxy.available === false ? false : proxyRoutes.filter(route => route.healthMode === 'http').every(route => route.severity === 'healthy'),
         },
         proxy: {
             degraded: proxyRoutes.filter(route => route.healthMode === 'http' && route.severity !== 'healthy').length,
             routes: proxyRoutes,
         },
         maintenance: {
-            overdue: maintenance.timers.filter(timer => timer.state !== 'waiting').length,
-            timers: maintenance.timers.slice(0, 4),
+            overdue: (maintenance.timers || []).filter(timer => timer.state !== 'waiting').length,
+            timers: (maintenance.timers || []).slice(0, 4),
         },
         recentEvents: (logs.events || []).slice(0, 8),
     };

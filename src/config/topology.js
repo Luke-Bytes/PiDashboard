@@ -1,13 +1,17 @@
 export const CRITICAL_SYSTEMD_SERVICES = [
-    { name: 'nginx', label: 'NGINX', critical: true, category: 'edge', ports: [443] },
-    { name: 'pm2-luke', label: 'PM2 Runtime', critical: true, category: 'apps' },
-    { name: 'pihole-FTL', label: 'Pi-hole FTL', critical: true, category: 'dns', ports: [53] },
+    { name: 'nginx.service', label: 'NGINX', critical: true, category: 'edge', ports: [443] },
+    { name: 'pm2-luke.service', label: 'PM2 Runtime', critical: true, category: 'apps' },
+    { name: 'pihole-FTL.service', label: 'Pi-hole FTL', critical: true, category: 'dns', ports: [53] },
     { name: 'unbound', label: 'Unbound', critical: true, category: 'dns' },
     { name: 'mongod', label: 'MongoDB', critical: true, category: 'data', ports: [27017] },
-    { name: 'jellyfin', label: 'Jellyfin', critical: false, category: 'media', ports: [8096] },
+    { name: 'jellyfin.service', label: 'Jellyfin', critical: true, category: 'media', ports: [8096] },
+    { name: 'rclone-ocean.service', label: 'Ocean mount', critical: true, category: 'media' },
+    { name: 'rclone-jellyfin-pool.service', label: 'Jellyfin pool', critical: true, category: 'media' },
+    { name: 'rclone-pool-health.timer', label: 'Pool health timer', critical: false, category: 'media' },
+    { name: 'openclaw-gateway.service', label: 'OpenClaw Gateway', critical: true, category: 'apps' },
     { name: 'fail2ban', label: 'Fail2Ban', critical: false, category: 'security' },
     { name: 'smartmontools', label: 'SMART Monitoring', critical: false, category: 'storage' },
-    { name: 'ssh', label: 'SSH', critical: true, category: 'access', ports: [22] },
+    { name: 'ssh.service', label: 'SSH', critical: true, category: 'access', ports: [22] },
     { name: 'NetworkManager', label: 'NetworkManager', critical: true, category: 'network' },
 ];
 

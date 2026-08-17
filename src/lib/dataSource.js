@@ -7,8 +7,15 @@ export function withDataSource(key, liveCollector) {
             return structuredClone(evidenceSnapshot[key]);
         }
 
-        const live = await liveCollector();
-        if (live) return live;
-        return structuredClone(evidenceSnapshot[key]);
+        try {
+            const live = await liveCollector();
+            if (live) return live;
+        } catch {}
+        return {
+            generatedAt: Date.now(),
+            available: false,
+            status: 'unavailable',
+            error: `${key} live collection unavailable`,
+        };
     };
 }

@@ -222,6 +222,43 @@ export const evidenceSnapshot = {
         ],
         sources: ['journal', 'pm2', 'nginx', 'pihole-FTL'],
     },
+    media: {
+        generatedAt: now,
+        available: true,
+        overall: { label: 'Attention', severity: 'warning' },
+        vault: {
+            state: 'unlocked', severity: 'healthy', intentionalLock: false,
+            mapperPresent: true, markerPresent: true, mountPresent: true,
+            requiredPaths: [{ path: '/media', present: true }, { path: '/var/lib/jellyfin', present: true }],
+        },
+        cloudMounts: [
+            { path: '/media/ocean', present: true, fuse: true, fsType: 'fuse.rclone' },
+            { path: '/media/pool', present: true, fuse: true, fsType: 'fuse.rclone' },
+        ],
+        services: [
+            { name: 'jellyfin.service', label: 'Jellyfin', state: 'active', subState: 'running', uptimeSeconds: 604800, restarts: 0, memoryBytes: 536870912, cpuSeconds: 8200 },
+            { name: 'rclone-ocean.service', label: 'Ocean', state: 'active', subState: 'running', uptimeSeconds: 604800, restarts: 0, memoryBytes: 94371840, cpuSeconds: 1400 },
+            { name: 'rclone-jellyfin-pool.service', label: 'Jellyfin Pool', state: 'active', subState: 'running', uptimeSeconds: 604800, restarts: 0, memoryBytes: 125829120, cpuSeconds: 2100 },
+        ],
+        systemdAvailable: true,
+        system: { uptimeSeconds: 2420000, cpuLoadPct: 9.4, memoryUsedBytes: 2254857830, memoryTotalBytes: 8482560409, zramUsedBytes: 214748364, zramTotalBytes: 4187593113, temperatureC: 45.5 },
+        capacity: [
+            { path: '/', label: 'Root', totalBytes: 984621817856, usedBytes: 708927708856, freeBytes: 275694109000, usedPct: 72, severity: 'healthy' },
+            { path: '/srv/secure', label: 'Vault', totalBytes: 845571686400, usedBytes: 482254127104, freeBytes: 363317559296, usedPct: 57, severity: 'healthy' },
+            { path: '/run', label: '/run', totalBytes: 1073741824, usedBytes: 128849018, freeBytes: 944892806, usedPct: 12, severity: 'healthy' },
+            { path: '/var/cache/jellyfin/transcodes', label: 'Transcode cache', totalBytes: 10737418240, usedBytes: 1073741824, freeBytes: 9663676416, usedPct: 10, severity: 'healthy' },
+            { path: 'zram', label: 'zram', totalBytes: 4187593113, usedBytes: 214748364, freeBytes: 3972844749, usedPct: 5.1, severity: 'healthy' },
+        ],
+        cloudAvailable: true,
+        providers: [
+            { id: 'ocean-a', quota: { total: 2199023255552, used: 824633720832, free: 1374389534720, trashed: 0 }, reachability: 'ok', lastAttempt: new Date(now - 86400000).toISOString(), lastSuccess: new Date(now - 86400000).toISOString(), errorCategory: null, reminder: { state: 'current', severity: 'healthy', label: 'Due 2026-12-01', nextDueDate: '2026-12-01' } },
+            { id: 'ocean-b', quota: { total: 1099511627776, used: 274877906944, free: 824633720832, trashed: 0 }, reachability: 'ok', lastAttempt: new Date(now - 86400000).toISOString(), lastSuccess: new Date(now - 86400000).toISOString(), errorCategory: null, reminder: { state: 'missing', severity: 'warning', label: 'Login date not recorded', nextDueDate: null } },
+        ],
+        aggregates: { reportedProviders: 2, totalProviders: 2, partial: false, total: 3298534883328, used: 1099511627776, free: 2199023255552, largestProviderFree: { provider: 'ocean-a', bytes: 1374389534720 } },
+        health: { state: 'healthy', severity: 'healthy', timer: { state: 'active', lastTrigger: new Date(now - 86400000).toISOString(), nextRun: new Date(now + 6 * 86400000).toISOString() }, service: { result: 'success' } },
+        diagnostics: [],
+        reminderStateVersion: 1,
+    },
     policy: {
         generatedAt: now,
         runtime: {
