@@ -1,0 +1,137 @@
+#!/usr/bin/python3
+"""Root-installed, one-way rclone quota cache collector.
+
+Configuration is supplied by root-owned /etc/pi-dashboard/cloud-status.conf via
+the systemd drop-in. This program emits no provider command output.
+"""
+
+import json
+import os
+import re
+import subprocess
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+PROVIDER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+CACHE_PATH = Path(os.environ.get("PI_DASHBOARD_CLOUD_CACHE", "/var/lib/pi-dashboard/cloud-status.json"))
+PROVIDERS_PATH = Path(os.environ.get("PI_DASHBOARD_PROVIDERS", "/srv/secure/rclone/providers.list"))
+RCLONE_CONFIG = os.environ.get("PI_DASHBOARD_RCLONE_CONFIG", "/srv/secure/rclone/rclone.conf")
+RCLONE_BINARY = os.environ.get("PI_DASHBOARD_RCLONE_BINARY", "/usr/bin/rclone")
+RUNUSER_BINARY = os.environ.get("PI_DASHBOARD_RUNUSER_BINARY", "/usr/sbin/runuser")
+PASSWORD_COMMAND = os.environ.get("PI_DASHBOARD_PASSWORD_COMMAND", "")
+
+
+def utc_now():
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def load_json(path, default):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def classify(message):
+    text = message.lower()
+    if "timeout" in text or "timed out" in text:
+        return "timeout"
+    if any(term in text for term in ("auth", "unauthorized", "forbidden", "invalid_grant", "401", "403")):
+        return "authentication_failure"
+    if "unsupported" in text or "not support" in text:
+        return "quota_unsupported"
+    return "unreachable"
+
+
+def read_providers():
+    names = []
+    for line in PROVIDERS_PATH.read_text(encoding="utf-8").splitlines():
+        name = line.strip()
+        if not name or name.startswith("#"):
+            continue
+        if not PROVIDER_RE.fullmatch(name):
+            raise ValueError("provider registry contains an invalid identifier")
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def about(provider):
+    command = [RUNUSER_BINARY, "-u", "jellyfin", "--", RCLONE_BINARY, "--config", RCLONE_CONFIG]
+    if PASSWORD_COMMAND:
+        command.extend(["--password-command", PASSWORD_COMMAND])
+    command.extend(["about", f"{provider}:", "--json"])
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=90, check=False)
+        if result.returncode:
+            return None, classify(result.stderr)
+        raw = json.loads(result.stdout)
+        quota = {key: raw.get(key) if isinstance(raw.get(key), (int, float)) and raw.get(key) >= 0 else None for key in ("total", "used", "free", "trashed")}
+        if all(quota[key] is None for key in ("total", "used", "free")):
+            return None, "quota_unsupported"
+        return quota, None
+    except subprocess.TimeoutExpired:
+        return None, "timeout"
+    except (OSError, ValueError) as error:
+        return None, classify(str(error))
+
+
+def atomic_write(value):
+    CACHE_PATH.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=".cloud-status.", dir=CACHE_PATH.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(value, handle, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o640)
+        try:
+            import pwd
+            os.chown(temporary, 0, pwd.getpwnam("luke").pw_gid)
+        except (KeyError, OSError):
+            pass
+        os.replace(temporary, CACHE_PATH)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def aggregate_field(quotas, key):
+    values = [item.get(key) for item in quotas if isinstance(item.get(key), (int, float))]
+    return sum(values) if values else None
+
+
+def main():
+    previous = load_json(CACHE_PATH, {"version": 1, "providerRegistry": [], "providers": {}})
+    try:
+        providers = read_providers()
+    except (OSError, ValueError):
+        return 0  # Vault locked/unavailable: preserve the last successful cache verbatim.
+    old = previous.get("providers", {}) if isinstance(previous.get("providers"), dict) else {}
+    output = {"version": 1, "generatedAt": utc_now(), "providerRegistry": providers, "providers": {}}
+    for provider in providers:
+        prior = old.get(provider, {}) if isinstance(old.get(provider), dict) else {}
+        attempt = utc_now()
+        quota, error = about(provider)
+        if quota is not None:
+            output["providers"][provider] = {"quota": quota, "reachability": "ok", "lastAttempt": attempt, "lastSuccess": attempt, "errorCategory": None}
+        else:
+            output["providers"][provider] = {
+                "quota": prior.get("quota"), "reachability": "failed", "lastAttempt": attempt,
+                "lastSuccess": prior.get("lastSuccess"), "errorCategory": error,
+            }
+    totals = [item.get("quota") for item in output["providers"].values() if isinstance(item.get("quota"), dict)]
+    output["aggregate"] = {
+        "reportedProviders": len(totals), "totalProviders": len(providers), "partial": len(totals) != len(providers),
+        **{key: aggregate_field(totals, key) for key in ("total", "used", "free")},
+    }
+    atomic_write(output)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

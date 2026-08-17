@@ -198,7 +198,11 @@ textarea {
 
 .hero-grid,
 .overview-grid,
-.grid-two {
+.grid-two,
+.media-grid,
+.overview-media-grid,
+.provider-grid,
+.capacity-grid {
     display: grid;
     gap: 18px;
 }
@@ -209,8 +213,79 @@ textarea {
 }
 
 .overview-grid,
-.grid-two {
+.grid-two,
+.media-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.overview-media-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-bottom: 18px;
+}
+
+.overview-mini {
+    padding: 0;
+}
+
+.overview-mini .stat {
+    border: 0;
+    background: transparent;
+    height: 100%;
+}
+
+.provider-grid,
+.capacity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.provider-card,
+.capacity-card {
+    display: grid;
+    gap: 13px;
+    padding: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.capacity-bar {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(143, 162, 181, 0.15);
+}
+
+.capacity-bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+}
+
+.provider-stats,
+.reminder-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.fine-print {
+    margin: 12px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+details summary {
+    cursor: pointer;
+    color: var(--muted);
+}
+
+.diagnostics {
+    margin-top: 14px;
 }
 
 .card {
@@ -385,7 +460,11 @@ textarea {
     .hero-grid,
     .overview-grid,
     .grid-two,
-    .stats-grid {
+    .stats-grid,
+    .media-grid,
+    .overview-media-grid,
+    .provider-grid,
+    .capacity-grid {
         grid-template-columns: 1fr;
     }
 
@@ -397,5 +476,23 @@ textarea {
     .table-row.compact,
     .table-row.wide {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .sidebar,
+    .main {
+        padding: 18px;
+    }
+
+    .nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .page-header,
+    .provider-stats,
+    .reminder-row {
+        align-items: stretch;
+        flex-direction: column;
     }
 }

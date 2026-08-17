@@ -16,6 +16,7 @@
         </div>
         <nav class="nav">
             <button class="nav-link active" data-target="overview">Overview</button>
+            <button class="nav-link" data-target="media">Media & Cloud</button>
             <button class="nav-link" data-target="policy">Policy</button>
             <button class="nav-link" data-target="services">Services</button>
             <button class="nav-link" data-target="proxy">Proxy & Routes</button>
@@ -28,7 +29,8 @@
         <div class="meta-card">
             <div class="metric-label">Data Mode</div>
             <div class="metric-value" id="dataMode">—</div>
-            <div class="meta-row"><span>Auto-refresh</span><span class="mono">10s</span></div>
+            <div class="meta-row"><span>Local refresh</span><span class="mono">15s</span></div>
+            <div class="meta-row"><span>Other pages</span><span class="mono">60s</span></div>
             <div class="meta-row"><span>Runtime</span><span class="mono">Node + PM2</span></div>
         </div>
     </aside>
@@ -38,7 +40,7 @@
                 <div>
                     <p class="eyebrow">Overview</p>
                     <h2>Operational state</h2>
-                    <p class="subtle">Fast-first critical state, with heavier summaries deferred.</p>
+                    <p class="subtle">Host, vault, media, and capacity health at a glance.</p>
                 </div>
                 <div class="page-actions">
                     <button class="ghost-button" id="copyOverviewBrief">Copy brief</button>
@@ -65,6 +67,7 @@
                     <div id="alertsList" class="stack"></div>
                 </article>
             </div>
+            <div class="overview-media-grid" id="overviewMediaCards"></div>
             <div class="overview-grid">
                 <article class="card">
                     <div class="card-header"><h3>Service matrix</h3></div>
@@ -93,6 +96,28 @@
                 <article class="card">
                     <div class="card-header"><h3>Recent warnings</h3></div>
                     <div id="eventsSummary" class="stack compact"></div>
+                </article>
+            </div>
+        </section>
+
+        <section class="page" id="page-media">
+            <div class="page-header">
+                <div>
+                    <p class="eyebrow">Media & Cloud</p>
+                    <h2>Vault lifecycle and media capacity</h2>
+                    <p class="subtle">Quota values come from the last scheduled health check. This page cannot run rclone.</p>
+                </div>
+                <div class="status-pill" id="mediaStatus">Loading</div>
+            </div>
+            <div class="media-grid">
+                <article class="card"><div class="card-header"><h3>Vault lifecycle</h3></div><div id="vaultLifecycle" class="stack compact"></div></article>
+                <article class="card"><div class="card-header"><h3>Jellyfin and mounts</h3></div><div id="mediaServices" class="stack compact"></div></article>
+                <article class="card"><div class="card-header"><h3>Aggregate cloud capacity</h3></div><div id="cloudAggregate"></div></article>
+                <article class="card"><div class="card-header"><h3>Weekly health</h3></div><div id="mediaHealth" class="stack compact"></div></article>
+                <article class="card card-span-2"><div class="card-header"><h3>Local capacity</h3></div><div id="mediaCapacity" class="capacity-grid"></div></article>
+                <article class="card card-span-2"><div class="card-header"><h3>Providers</h3></div><div id="providerCards" class="provider-grid"></div></article>
+                <article class="card card-span-2">
+                    <details><summary>Sanitized recent diagnostics</summary><div id="mediaDiagnostics" class="stack compact diagnostics"></div></details>
                 </article>
             </div>
         </section>
