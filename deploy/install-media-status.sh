@@ -3,6 +3,7 @@ set -eu
 
 CONFIG=/etc/pi-dashboard/cloud-status.conf
 CACHE=/var/lib/pi-dashboard/cloud-status.json
+ACCOUNTS=/etc/pi-dashboard/provider-accounts.json
 DASHBOARD_USER=luke
 DASHBOARD_GROUP=luke
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -33,6 +34,15 @@ fi
 if find "$CONFIG" -prune -perm /077 | grep -q .; then
     fail "configuration permissions are too broad; use mode 0600"
 fi
+if [ -L "$ACCOUNTS" ]; then
+    fail "refusing symlinked provider account mapping at $ACCOUNTS"
+fi
+if [ ! -e "$ACCOUNTS" ]; then
+    install -o root -g root -m 0600 /dev/null "$ACCOUNTS"
+    printf '%s\n' '{}' > "$ACCOUNTS"
+    echo "Installed provider account mapping at $ACCOUNTS"
+fi
+[ "$(stat -c '%U:%G %a' "$ACCOUNTS")" = "root:root 600" ] || fail "provider account mapping must be root:root mode 0600"
 
 set -a
 # shellcheck disable=SC1090
@@ -44,6 +54,9 @@ set +a
 [ -n "${PI_DASHBOARD_RCLONE_BINARY:-}" ] || fail "PI_DASHBOARD_RCLONE_BINARY is not configured"
 [ -n "${PI_DASHBOARD_PASSWORD_COMMAND:-}" ] || fail "PI_DASHBOARD_PASSWORD_COMMAND is not configured"
 [ -n "${PI_DASHBOARD_CLOUD_CACHE:-}" ] || fail "PI_DASHBOARD_CLOUD_CACHE is not configured"
+PI_DASHBOARD_PROVIDER_ACCOUNTS=${PI_DASHBOARD_PROVIDER_ACCOUNTS:-$ACCOUNTS}
+export PI_DASHBOARD_PROVIDER_ACCOUNTS
+[ "$PI_DASHBOARD_PROVIDER_ACCOUNTS" = "$ACCOUNTS" ] || fail "provider account mapping must be configured as $ACCOUNTS"
 [ -r "$PI_DASHBOARD_PROVIDERS" ] || fail "provider registry is not readable: $PI_DASHBOARD_PROVIDERS"
 [ -s "$PI_DASHBOARD_PROVIDERS" ] || fail "provider registry is empty: $PI_DASHBOARD_PROVIDERS"
 [ -r "$PI_DASHBOARD_RCLONE_CONFIG" ] || fail "rclone config is not readable: $PI_DASHBOARD_RCLONE_CONFIG"

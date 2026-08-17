@@ -4,3 +4,4 @@ PI_DASHBOARD_RCLONE_CONFIG=/srv/secure/rclone/pool/rclone.conf
 PI_DASHBOARD_RCLONE_BINARY=/usr/local/bin/rclone-cloud
 PI_DASHBOARD_PASSWORD_COMMAND=/usr/local/libexec/rclone-pool-config-pass
 PI_DASHBOARD_CLOUD_CACHE=/var/lib/pi-dashboard/cloud-status.json
+PI_DASHBOARD_PROVIDER_ACCOUNTS=/etc/pi-dashboard/provider-accounts.json

@@ -16,6 +16,7 @@ from pathlib import Path
 PROVIDER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 EMAIL_RE = re.compile(r"^[^\s@]{1,64}@[^\s@]{1,189}$")
 CACHE_PATH = Path(os.environ.get("PI_DASHBOARD_CLOUD_CACHE", "/var/lib/pi-dashboard/cloud-status.json"))
+ACCOUNTS_PATH = Path(os.environ.get("PI_DASHBOARD_PROVIDER_ACCOUNTS", "/etc/pi-dashboard/provider-accounts.json"))
 PROVIDERS_PATH = Path(os.environ.get("PI_DASHBOARD_PROVIDERS", "/srv/secure/rclone/pool/providers.list"))
 RCLONE_CONFIG = os.environ.get("PI_DASHBOARD_RCLONE_CONFIG", "/srv/secure/rclone/pool/rclone.conf")
 RCLONE_BINARY = os.environ.get("PI_DASHBOARD_RCLONE_BINARY", "/usr/local/bin/rclone-cloud")
@@ -58,6 +59,25 @@ def read_providers():
     if not names:
         raise ValueError("provider registry contains no providers")
     return names
+
+
+def read_accounts():
+    if not ACCOUNTS_PATH.exists():
+        return {}
+    try:
+        raw = json.loads(ACCOUNTS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"provider account mapping is unreadable or invalid: {error}") from error
+    if not isinstance(raw, dict):
+        raise ValueError("provider account mapping must be a JSON object")
+    accounts = {}
+    for provider, account in raw.items():
+        if not PROVIDER_RE.fullmatch(provider):
+            raise ValueError("provider account mapping contains an invalid provider identifier")
+        if not isinstance(account, str) or not account.strip() or len(account.strip()) > 254 or any(ord(character) < 32 or ord(character) == 127 for character in account):
+            raise ValueError(f"provider account mapping contains an invalid account for {provider}")
+        accounts[provider] = account.strip()
+    return accounts
 
 
 def validate_configuration():
@@ -149,6 +169,7 @@ def main():
     try:
         validate_configuration()
         providers = read_providers()
+        accounts = read_accounts()
     except (OSError, ValueError, RuntimeError) as error:
         print(f"pi-dashboard cloud collector setup error: {error}", file=os.sys.stderr)
         return 2
@@ -157,7 +178,7 @@ def main():
     for provider in providers:
         prior = old.get(provider, {}) if isinstance(old.get(provider), dict) else {}
         attempt = utc_now()
-        account = account_email(provider) or prior.get("account")
+        account = accounts.get(provider) or account_email(provider) or prior.get("account")
         quota, error = about(provider)
         if quota is not None:
             output["providers"][provider] = {"account": account, "quota": quota, "reachability": "ok", "lastAttempt": attempt, "lastSuccess": attempt, "errorCategory": None}
